@@ -8,7 +8,7 @@ import {
   Briefcase, Search, MapPin, Building, Calendar, DollarSign, 
   Sparkles, AlertCircle, FileText, CheckCircle2, ChevronRight, 
   LogOut, Clipboard, Check, Edit3, TrendingUp, Cpu, Info, SlidersHorizontal, Settings,
-  Globe, RefreshCw, ExternalLink, Mail
+  Globe, RefreshCw, ExternalLink, Mail, X
 } from 'lucide-react';
 
 interface JobPortalDashboardProps {
@@ -38,6 +38,7 @@ export default function JobPortalDashboard({ user, token, onLogout, onUserUpdate
 
   // Direct Apply and platform links
   const [appliedJobs, setAppliedJobs] = useState<string[]>([]);
+  const [appliedJobsDetails, setAppliedJobsDetails] = useState<any[]>([]);
   const [applyingJobId, setApplyingJobId] = useState<string | null>(null);
   const [showDirectApplyToast, setShowDirectApplyToast] = useState<string | null>(null);
   
@@ -64,6 +65,8 @@ export default function JobPortalDashboard({ user, token, onLogout, onUserUpdate
   const [sentEmails, setSentEmails] = useState<any[]>([]);
   const [supabaseEnabled, setSupabaseEnabled] = useState(false);
   const [isLiveSupabase, setIsLiveSupabase] = useState(false);
+  const [supabaseStatusCheck, setSupabaseStatusCheck] = useState<any>(null);
+  const [isCheckingSupabase, setIsCheckingSupabase] = useState(false);
   const [strictMatchFilter, setStrictMatchFilter] = useState(false);
 
   // Direct HR Email Dialog state
@@ -75,6 +78,94 @@ export default function JobPortalDashboard({ user, token, onLogout, onUserUpdate
   const [emailSendSuccess, setEmailSendSuccess] = useState(false);
   const [copyLinkSuccess, setCopyLinkSuccess] = useState<string | null>(null);
 
+  // Simulated External Portal state variables
+  const [externalPortalModalOpen, setExternalPortalModalOpen] = useState(false);
+  const [simulatedJobForPortal, setSimulatedJobForPortal] = useState<Job | null>(null);
+  const [portalApplySuccess, setPortalApplySuccess] = useState(false);
+  const [portalApplying, setPortalApplying] = useState(false);
+  const [simulatedCoverLetter, setSimulatedCoverLetter] = useState('');
+
+  // Brand color/banner mappings helper
+  const getBrandDetails = (source?: string) => {
+    const src = (source || 'LinkedIn').toLowerCase();
+    if (src.includes('linkedin')) {
+      return {
+        name: 'LinkedIn',
+        primary: 'bg-[#0077b5] text-white',
+        hover: 'hover:bg-[#005582]',
+        text: 'text-[#0077b5]',
+        iconBg: 'bg-[#0077b5]/10',
+        borderColor: 'border-[#0077b5]/20',
+        pillText: 'LinkedIn Easy Apply',
+        banner: 'https://images.unsplash.com/photo-1616469829581-73993eb86b02?q=80&w=600&auto=format&fit=crop'
+      };
+    } else if (src.includes('naukri')) {
+      return {
+        name: 'Naukri',
+        primary: 'bg-[#091e42] text-white',
+        hover: 'hover:bg-[#051126]',
+        text: 'text-[#4a90e2]',
+        iconBg: 'bg-[#4a90e2]/10',
+        borderColor: 'border-[#4a90e2]/20',
+        pillText: 'Naukri Fast Apply',
+        banner: 'https://images.unsplash.com/photo-1586281380349-632531db7ed4?q=80&w=600&auto=format&fit=crop'
+      };
+    } else if (src.includes('monster')) {
+      return {
+        name: 'Monster',
+        primary: 'bg-[#5f259f] text-white',
+        hover: 'hover:bg-[#481c7a]',
+        text: 'text-[#5f259f]',
+        iconBg: 'bg-[#5f259f]/10',
+        borderColor: 'border-[#5f259f]/20',
+        pillText: 'Monster Quick Apply',
+        banner: 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?q=80&w=600&auto=format&fit=crop'
+      };
+    } else if (src.includes('hirist')) {
+      return {
+        name: 'Hirist',
+        primary: 'bg-[#00a896] text-white',
+        hover: 'hover:bg-[#028074]',
+        text: 'text-[#00a896]',
+        iconBg: 'bg-[#00a896]/10',
+        borderColor: 'border-[#00a896]/20',
+        pillText: 'Hirist Tech Apply',
+        banner: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=600&auto=format&fit=crop'
+      };
+    } else if (src.includes('timesjobs') || src.includes('times')) {
+      return {
+        name: 'TimesJobs',
+        primary: 'bg-[#b31919] text-white',
+        hover: 'hover:bg-[#851111]',
+        text: 'text-[#b31919]',
+        iconBg: 'bg-[#b31919]/10',
+        borderColor: 'border-[#b31919]/20',
+        pillText: 'TimesJobs Quick Apply',
+        banner: 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?q=80&w=600&auto=format&fit=crop'
+      };
+    } else {
+      return {
+        name: source || 'Source Portal',
+        primary: 'bg-cyan-500 text-slate-950',
+        hover: 'hover:bg-cyan-400',
+        text: 'text-cyan-400',
+        iconBg: 'bg-cyan-500/10',
+        borderColor: 'border-cyan-500/20',
+        pillText: 'Platform Express Apply',
+        banner: 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?q=80&w=600&auto=format&fit=crop'
+      };
+    }
+  };
+
+  useEffect(() => {
+    if (externalPortalModalOpen && simulatedJobForPortal) {
+      const existingLetter = (selectedJobForLetter?.id === simulatedJobForPortal.id && generatedLetterText) ? generatedLetterText : "";
+      setSimulatedCoverLetter(existingLetter);
+      setPortalApplySuccess(false);
+      setPortalApplying(false);
+    }
+  }, [externalPortalModalOpen, simulatedJobForPortal, selectedJobForLetter?.id, generatedLetterText]);
+
   // Load telemetry states
   const fetchTelemetryActivities = async () => {
     try {
@@ -84,6 +175,7 @@ export default function JobPortalDashboard({ user, token, onLogout, onUserUpdate
       if (res.ok) {
         const data = await res.json();
         setAppliedJobs(data.applied || []);
+        setAppliedJobsDetails(data.appliedDetails || []);
         setClickedJobs(data.clicked || []);
         setSentEmails(data.emails || []);
         setSupabaseEnabled(data.supabaseEnabled || false);
@@ -91,6 +183,23 @@ export default function JobPortalDashboard({ user, token, onLogout, onUserUpdate
       }
     } catch (e) {
       console.error('Failed to load user interaction sync list', e);
+    }
+  };
+
+  const checkSupabaseDetails = async () => {
+    setIsCheckingSupabase(true);
+    try {
+      const res = await fetch('/api/supabase/check-status', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setSupabaseStatusCheck(data);
+      }
+    } catch (e) {
+      console.error('Failed to audit Supabase database connections', e);
+    } finally {
+      setIsCheckingSupabase(false);
     }
   };
 
@@ -504,6 +613,7 @@ export default function JobPortalDashboard({ user, token, onLogout, onUserUpdate
                     onClick={() => {
                       setActiveTab('activity');
                       fetchTelemetryActivities();
+                      checkSupabaseDetails();
                     }}
                     className={`py-1.5 rounded-lg text-[9.5px] font-bold transition-all cursor-pointer truncate ${activeTab === 'activity' ? 'bg-white/10 text-white font-extrabold text-[#22d3ee]' : 'text-slate-400 hover:text-white'}`}
                   >
@@ -578,57 +688,110 @@ export default function JobPortalDashboard({ user, token, onLogout, onUserUpdate
                     // Display Activity & Supabase Sync history log
                     <div className="space-y-4 max-h-[460px] overflow-y-auto pr-1">
                       {/* Database Connection Tracker */}
-                      <div className="bg-slate-950/40 border border-white/5 p-3 rounded-2xl flex flex-col gap-2">
+                      <div className="bg-slate-950/40 border border-white/5 p-3 rounded-2xl flex flex-col gap-2 font-sans">
                         <div className="flex justify-between items-center text-[10px]">
-                          <span className="font-bold text-slate-400 uppercase">Supabase Status</span>
+                          <span className="font-extrabold text-slate-400 uppercase">Supabase Status</span>
                           {supabaseEnabled ? (
                             isLiveSupabase ? (
-                              <span className="text-emerald-400 font-bold uppercase tracking-wider flex items-center gap-1">
+                              <span className="text-emerald-400 font-extrabold uppercase tracking-wider flex items-center gap-1">
                                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                                Live Sync
+                                Live Sync Connected
                               </span>
                             ) : (
-                              <span className="text-amber-400 font-bold uppercase tracking-wider flex items-center gap-1">
+                              <span className="text-amber-400 font-extrabold uppercase tracking-wider flex items-center gap-1">
                                 <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span>
-                                Soft mode
+                                Tables Missing / Soft Mode
                               </span>
                             )
                           ) : (
-                            <span className="text-slate-450 font-bold uppercase tracking-wider flex items-center gap-1">
+                            <span className="text-slate-500 font-bold uppercase tracking-wider flex items-center gap-1">
                               <span className="w-1.5 h-1.5 rounded-full bg-slate-500"></span>
-                              Local json
+                              Local db.json
                             </span>
                           )}
                         </div>
                         
-                        <p className="text-[10.5px] text-slate-400 leading-normal">
+                        <p className="text-[10px] text-slate-400 leading-relaxed font-sans">
                           {supabaseEnabled && isLiveSupabase 
-                            ? "Connected to real-time cloud data. Your job clicks, applications, and direct HR emails are active."
+                            ? "Authenticating & mirroring credentials continuously. Your profiles, clicks, and dispatched application metrics are secure in Supabase."
                             : supabaseEnabled 
-                              ? "Supabase configured but tables need initialization. Ensure you have run the database setup script."
-                              : "Operating in safe persistent local datastore. Provide Supabase environment values in Settings to activate global cloud backup."}
+                              ? "Supabase API client is online but target collections cannot be queried. Run the DB schema definition scripts below."
+                              : "Operating in safe-mode offline database. To bind multiple profiles & preserve logs persistently, add Supabase secrets."}
                         </p>
 
-                        {!isLiveSupabase && (
-                          <details className="text-[9px] text-cyan-400 font-semibold cursor-pointer select-none">
-                            <summary className="hover:underline focus:outline-none">Show Supabase SQL Schema</summary>
-                            <pre className="mt-2 bg-[#020617] text-slate-300 p-2 rounded border border-white/5 overflow-x-auto text-[8px] leading-tight select-text">
+                        {/* Live Table Auditing Check */}
+                        {supabaseEnabled && (
+                          <div className="mt-1 pt-2 border-t border-white/5 space-y-2">
+                            <div className="flex justify-between items-center">
+                              <span className="text-[9px] uppercase font-bold text-slate-400">Cloud Schema Integrity</span>
+                              <button
+                                onClick={checkSupabaseDetails}
+                                disabled={isCheckingSupabase}
+                                className="text-[9px] text-cyan-400 hover:text-cyan-300 underline font-semibold focus:outline-none cursor-pointer"
+                              >
+                                {isCheckingSupabase ? "Auditing Cloud..." : "Audit Tables Now"}
+                              </button>
+                            </div>
+
+                            {supabaseStatusCheck ? (
+                              <div className="space-y-1 bg-slate-950/60 p-2.5 rounded-xl border border-white/5">
+                                <div className="grid grid-cols-2 gap-1.5 text-[9.5px]">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className={supabaseStatusCheck.tables?.users ? "text-emerald-400 font-bold" : "text-rose-450 font-bold"}>
+                                      {supabaseStatusCheck.tables?.users ? "✓" : "✗"}
+                                    </span>
+                                    <span className="text-slate-300 font-mono">users</span>
+                                  </div>
+                                  <div className="flex items-center gap-1.5">
+                                    <span className={supabaseStatusCheck.tables?.job_applications ? "text-emerald-400 font-bold" : "text-rose-450 font-bold"}>
+                                      {supabaseStatusCheck.tables?.job_applications ? "✓" : "✗"}
+                                    </span>
+                                    <span className="text-slate-300 font-mono">job_applications</span>
+                                  </div>
+                                  <div className="flex items-center gap-1.5">
+                                    <span className={supabaseStatusCheck.tables?.job_clicks ? "text-emerald-400 font-bold" : "text-rose-450 font-bold"}>
+                                      {supabaseStatusCheck.tables?.job_clicks ? "✓" : "✗"}
+                                    </span>
+                                    <span className="text-slate-300 font-mono">job_clicks</span>
+                                  </div>
+                                  <div className="flex items-center gap-1.5">
+                                    <span className={supabaseStatusCheck.tables?.job_emails ? "text-emerald-400 font-bold" : "text-rose-450 font-bold"}>
+                                      {supabaseStatusCheck.tables?.job_emails ? "✓" : "✗"}
+                                    </span>
+                                    <span className="text-slate-300 font-mono">job_emails</span>
+                                  </div>
+                                </div>
+                                {Object.values(supabaseStatusCheck.tables || {}).some(v => !v) && (
+                                  <p className="text-[8.5px] text-amber-300/90 leading-normal pt-1.5 border-t border-white/5 select-text font-medium">
+                                    Notice: Missing tables found. Copy the SQL definitions below, paste them into your Supabase SQL Editor and execute them.
+                                  </p>
+                                )}
+                              </div>
+                            ) : (
+                              <p className="text-[8.5px] text-slate-500 italic">Verify remote table sync channels are active.</p>
+                            )}
+                          </div>
+                        )}
+
+                        <details className="text-[9px] text-cyan-400 font-semibold cursor-pointer select-none">
+                          <summary className="hover:underline focus:outline-none">Get Supabase SQL Tables Blueprint</summary>
+                          <pre className="mt-2 bg-[#020617] text-slate-300 p-2.5 rounded-xl border border-white/5 overflow-x-auto text-[8px] leading-relaxed select-text font-mono max-h-40">
 {`-- Run inside your Supabase SQL editor:
 
-CREATE TABLE job_clicks (
-  id TIMESTAMP DEFAULT NOW(),
-  user_id TEXT,
-  user_name TEXT,
-  user_email TEXT,
-  job_id TEXT,
-  job_title TEXT,
-  company TEXT,
-  source TEXT,
-  clicked_at TIMESTAMP
+CREATE TABLE IF NOT EXISTS users (
+  id TEXT PRIMARY KEY,
+  full_name TEXT,
+  email TEXT UNIQUE,
+  password TEXT,
+  profile_completed BOOLEAN DEFAULT false,
+  preferences JSONB,
+  resume_text TEXT,
+  resume_file_name TEXT,
+  analysis JSONB
 );
 
-CREATE TABLE job_applications (
-  id TIMESTAMP DEFAULT NOW(),
+CREATE TABLE IF NOT EXISTS job_clicks (
+  id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
   user_id TEXT,
   user_name TEXT,
   user_email TEXT,
@@ -636,13 +799,25 @@ CREATE TABLE job_applications (
   job_title TEXT,
   company TEXT,
   source TEXT,
-  applied_at TIMESTAMP,
+  clicked_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
+);
+
+CREATE TABLE IF NOT EXISTS job_applications (
+  id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+  user_id TEXT,
+  user_name TEXT,
+  user_email TEXT,
+  job_id TEXT,
+  job_title TEXT,
+  company TEXT,
+  source TEXT,
+  applied_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()),
   cover_letter TEXT,
-  status TEXT
+  status TEXT DEFAULT 'PENDING_AUDIT'
 );
 
-CREATE TABLE job_emails (
-  id TIMESTAMP DEFAULT NOW(),
+CREATE TABLE IF NOT EXISTS job_emails (
+  id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
   user_id TEXT,
   user_name TEXT,
   user_email TEXT,
@@ -652,15 +827,20 @@ CREATE TABLE job_emails (
   hr_email TEXT,
   subject TEXT,
   body TEXT,
-  sent_at TIMESTAMP
-);`}
-                            </pre>
-                          </details>
-                        )}
+  sent_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
+);
+
+-- Crucial: Disable Row Level Security (RLS) to permit direct REST inserts under the anon key during testing:
+ALTER TABLE users DISABLE ROW LEVEL SECURITY;
+ALTER TABLE job_clicks DISABLE ROW LEVEL SECURITY;
+ALTER TABLE job_applications DISABLE ROW LEVEL SECURITY;
+ALTER TABLE job_emails DISABLE ROW LEVEL SECURITY;`}
+                          </pre>
+                        </details>
                       </div>
 
                       {/* Emailed HR Contacts History */}
-                      <div className="space-y-2">
+                      <div className="space-y-2 font-sans">
                         <p className="text-[10px] uppercase font-bold tracking-wider text-slate-400">Sent HR Emails ({sentEmails.length})</p>
                         {sentEmails.length === 0 ? (
                           <p className="text-[10px] text-slate-500 italic">No direct HR emails sent yet.</p>
@@ -687,19 +867,56 @@ CREATE TABLE job_emails (
                         )}
                       </div>
 
-                      {/* Applied jobs tracker list */}
-                      <div className="space-y-2 pt-2 border-t border-white/5">
-                        <p className="text-[10px] uppercase font-bold tracking-wider text-slate-400">Applications Sent ({appliedJobs.length})</p>
-                        {appliedJobs.length === 0 ? (
-                          <p className="text-[10px] text-slate-500 italic">No job applications submitted.</p>
+                      {/* Applied jobs tracker list - Structured Detailed View */}
+                      <div className="space-y-3 pt-3 border-t border-white/5 font-sans">
+                        <div className="flex justify-between items-center pb-1">
+                          <p className="text-[10px] uppercase font-extrabold tracking-wider text-slate-400">Applications Sent ({appliedJobsDetails.length})</p>
+                          <span className="text-[9px] text-slate-500 font-medium">Full Status Logs</span>
+                        </div>
+                        {appliedJobsDetails.length === 0 ? (
+                          <div className="text-center py-4 bg-slate-950/20 rounded-2xl border border-white/5">
+                            <p className="text-[10px] text-slate-500 italic leading-relaxed">No job applications submitted yet.</p>
+                          </div>
                         ) : (
-                          <div className="flex flex-wrap gap-1">
-                            {appliedJobs.map((jid) => {
-                              const job = jobs.find(j => j.id === jid);
+                          <div className="space-y-2">
+                            {appliedJobsDetails.map((app, idx) => {
+                              const job = jobs.find(j => j.id === app.jobId);
+                              const formattedDate = new Date(app.appliedAt).toLocaleString();
                               return (
-                                <span key={jid} className="bg-emerald-500/10 text-emerald-300 text-[9px] font-bold px-2 py-0.5 rounded border border-emerald-500/20 max-w-full truncate" title={job?.title || jid}>
-                                  {job ? `${job.company} (${job.locationModel})` : jid}
-                                </span>
+                                <div key={idx} className="bg-slate-950/40 border border-white/5 rounded-2xl p-3 text-left space-y-2 text-[11px] hover:border-cyan-400/30 transition-all">
+                                  <div className="flex justify-between items-start gap-1">
+                                    <div>
+                                      <h5 className="font-extrabold text-white text-[11px] leading-snug">{app.jobTitle}</h5>
+                                      <p className="text-slate-400 text-[10px] font-semibold">{app.company} &bull; <span className="text-[9px] font-mono text-cyan-400 font-bold">{app.source}</span></p>
+                                    </div>
+                                    <span className="text-[8px] bg-emerald-500/10 text-emerald-300 px-2 py-0.5 rounded-full border border-emerald-500/20 font-extrabold shrink-0 uppercase tracking-wide">
+                                      {app.status || "PENDING"}
+                                    </span>
+                                  </div>
+
+                                  <div className="flex items-center justify-between gap-2 text-[9px] pt-1.5 border-t border-white/5">
+                                    <span className="text-slate-500 font-mono">{formattedDate}</span>
+                                    {job && (
+                                      <button
+                                        onClick={() => handleJobSelect(job)}
+                                        className="text-cyan-400 hover:text-cyan-300 font-semibold uppercase tracking-wider text-[8px] hover:underline cursor-pointer bg-white/5 px-2 py-0.5 rounded transition-all"
+                                      >
+                                        Locate Listing &rarr;
+                                      </button>
+                                    )}
+                                  </div>
+
+                                  {app.coverLetter ? (
+                                    <details className="text-[9px] text-cyan-400 font-semibold cursor-pointer select-none">
+                                      <summary className="hover:underline focus:outline-none">Show Tailored Cover Pitch</summary>
+                                      <div className="mt-1.5 bg-[#020617] p-2.5 rounded-xl border border-white/5 text-[9.5px] text-slate-300 leading-normal max-h-24 overflow-y-auto whitespace-pre-wrap select-text selection:bg-cyan-500/20 font-sans cursor-text font-normal">
+                                        {app.coverLetter}
+                                      </div>
+                                    </details>
+                                  ) : (
+                                    <p className="text-[8.5px] text-slate-500 italic">No custom cover pitch submitted.</p>
+                                  )}
+                                </div>
                               );
                             })}
                           </div>
@@ -731,10 +948,41 @@ CREATE TABLE job_emails (
             />
           </div>
 
+          {/* Succeeding Industry Trends Panel */}
+          <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-3xl p-6 flex flex-col">
+            <h4 className="text-xs uppercase tracking-widest text-slate-400 font-bold mb-4 flex items-center gap-2">
+              <TrendingUp className="w-3.5 h-3.5 text-emerald-400" />
+              Succeeding Industry Trends
+            </h4>
+            <div className="space-y-4 font-sans">
+              <div>
+                <div className="flex justify-between text-xs mb-1.5 font-medium">
+                  <span className="text-slate-300 font-semibold text-[11px]">Generative AI Specialist</span>
+                  <span className="text-emerald-400 font-bold text-[11px]">+28.3%</span>
+                </div>
+                <div className="w-full h-1 bg-white/5 rounded-full overflow-hidden">
+                  <div className="h-full bg-cyan-500 rounded-full w-[85%]"></div>
+                </div>
+              </div>
+              <div>
+                <div className="flex justify-between text-xs mb-1.5 font-medium">
+                  <span className="text-slate-300 font-semibold text-[11px]">Distributed Architecture</span>
+                  <span className="text-emerald-400 font-bold text-[11px]">+16.1%</span>
+                </div>
+                <div className="w-full h-1 bg-white/5 rounded-full overflow-hidden">
+                  <div className="h-full bg-purple-500 rounded-full w-[65%]"></div>
+                </div>
+              </div>
+              <div className="pt-1 text-[9.5px] text-slate-500 italic leading-snug">
+                &ldquo;Calculated based on real-time metadata indexing patterns of hiring agencies globally.&rdquo;
+              </div>
+            </div>
+          </div>
+
         </section>
 
-        {/* Middle Column (span 5): Live matching feed cards */}
-        <section className="lg:col-span-5 space-y-4">
+        {/* Middle Column (span 8): Live matching feed cards and expanded inline center apply panels */}
+        <section className="lg:col-span-8 space-y-4">
           <div className="flex flex-col gap-2">
             <div className="flex items-center justify-between">
               <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-300">
@@ -882,7 +1130,81 @@ CREATE TABLE job_emails (
                 </button>
               </div>
             ) : (
-              processedJobs.map((job) => {
+              <>
+                {/* AI Best Fit Recommendation Featured Block */}
+                {user.resumeText && processedJobs.length > 0 && (
+                  (() => {
+                    const bestJob = processedJobs[0];
+                    const bestMatch = matches.find(m => m.jobId === bestJob.id);
+                    if (!bestMatch || bestMatch.score < 70) return null; // Only recommend if score is high
+
+                    const isCurrentlySelected = selectedMatch?.jobId === bestJob.id;
+
+                    return (
+                      <div 
+                        onClick={() => handleJobSelect(bestJob)}
+                        className={`relative overflow-hidden rounded-3xl p-5 border cursor-pointer transition-all mb-4 ${
+                          isCurrentlySelected 
+                            ? 'bg-gradient-to-br from-cyan-950/45 to-indigo-950/45 border-cyan-400 shadow-xl shadow-cyan-950/40 ring-1 ring-cyan-400/30' 
+                            : 'bg-gradient-to-br from-cyan-950/25 to-indigo-950/15 border-cyan-500/30 hover:border-cyan-400/80 shadow-md hover:shadow-lg hover:bg-white/5'
+                        }`}
+                      >
+                        {/* Featured Sticker */}
+                        <div className="absolute top-0 right-0 px-2.5 py-1 bg-gradient-to-r from-cyan-400 to-indigo-400 text-slate-950 text-[9px] font-black uppercase tracking-widest rounded-bl-xl select-none flex items-center gap-1 shadow-sm">
+                          <Sparkles className="w-2.5 h-2.5 animate-spin" style={{ animationDuration: '6s' }} />
+                          Best AI Match ({bestMatch.score}%)
+                        </div>
+
+                        <div className="flex gap-4">
+                          <div className="w-12 h-12 bg-slate-950 rounded-2xl flex items-center justify-center font-black text-cyan-300 text-lg border border-cyan-500/20 shadow-lg shrink-0 select-none uppercase">
+                            {bestJob.logo}
+                          </div>
+
+                          <div className="flex-grow min-w-0 pr-12">
+                            <span className="text-[10px] text-cyan-400 font-extrabold tracking-widest uppercase block mb-0.5">
+                              Recommended Career Destination
+                            </span>
+                            <h4 className="font-extrabold text-sm text-white hover:text-cyan-300 transition-colors truncate">
+                              {bestJob.title}
+                            </h4>
+                            <p className="text-xs text-slate-400 truncate mb-1">
+                              {bestJob.company} • <span className="text-slate-400 font-bold">{bestJob.location} ({bestJob.locationModel})</span>
+                            </p>
+                            
+                            <div className="flex flex-wrap gap-1 mb-2">
+                              {bestMatch.matchingSkills.slice(0, 3).map((skill, index) => (
+                                <span key={index} className="text-[9px] bg-cyan-950/80 border border-cyan-500/20 text-cyan-300 px-2 py-0.5 rounded-md font-mono font-bold">
+                                  ✓ {skill}
+                                </span>
+                              ))}
+                            </div>
+
+                            <div className="flex items-center justify-between gap-2 mt-2">
+                              <span className="text-[10px] text-slate-400 font-medium truncate">
+                                Aligned on <span className="text-emerald-400 font-bold">{bestMatch.matchingSkills.length}</span> key profile requirements
+                              </span>
+                              <div className="flex items-center gap-2 shrink-0">
+                                <span className="text-[10px] text-cyan-400 font-bold italic">Apply to best fit first</span>
+                                <span className="relative flex h-2 w-2">
+                                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
+                                  <span className="relative inline-flex rounded-full h-2 w-2 bg-cyan-500"></span>
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()
+                )}
+
+                {/* Sublist heading */}
+                <div className="text-[10px] uppercase tracking-wider font-extrabold text-slate-500 mb-2.5 pl-1 select-none flex items-center justify-between">
+                  <span>Available Match Vacancies ({processedJobs.length})</span>
+                  {user.resumeText && <span className="text-cyan-400 lowercase normal-case font-normal text-right">Sorted by compatibility rating</span>}
+                </div>
+
+                {processedJobs.map((job) => {
                 const matchMetric = getMatchMetric(job.id);
                 const hasScore = matchMetric !== undefined;
                 const score = hasScore ? matchMetric.score : 0;
@@ -901,574 +1223,490 @@ CREATE TABLE job_emails (
                   <div
                     key={job.id}
                     onClick={() => handleJobSelect(job)}
-                    className={`group hover:bg-white/10 border rounded-3xl p-4.5 flex gap-4 transition-all cursor-pointer ${
+                    className={`group border rounded-3xl p-5 flex flex-col gap-4.5 transition-all cursor-pointer ${
                       isCurrentlySelected 
-                        ? 'bg-white/12 border-cyan-400/70 shadow-lg shadow-cyan-950/20' 
-                        : 'bg-white/5 border-white/10'
+                        ? 'bg-slate-900/80 border-cyan-400 shadow-xl shadow-cyan-950/30' 
+                        : 'bg-white/5 border-white/10 hover:bg-white/10 hover:border-white/20'
                     }`}
                   >
-                    <div className="w-12 h-12 bg-slate-900 rounded-xl flex items-center justify-center font-extrabold text-white text-lg tracking-wider border border-white/5 select-none uppercase shadow-inner shrink-0 leading-none">
-                      {job.logo}
+                    {/* Upper Row Header info */}
+                    <div className="flex gap-4.5">
+                      <div className="w-12 h-12 bg-slate-950 rounded-2xl flex items-center justify-center font-black text-white text-lg tracking-wider border border-white/5 select-none uppercase shadow-inner shrink-0 leading-none">
+                        {job.logo}
+                      </div>
+
+                      <div className="flex-1 min-w-0">
+                        <div className="flex justify-between items-start gap-2">
+                          <div>
+                            <h3 className="font-extrabold text-sm text-white group-hover:text-cyan-300 transition-colors flex flex-wrap items-center gap-1.5 truncate">
+                              <span className="truncate">{job.title}</span>
+                              {appliedJobs.includes(job.id) && (
+                                <span className="shrink-0 bg-emerald-500/15 text-emerald-300 text-[8.5px] font-extrabold px-1.5 py-0.5 rounded border border-emerald-500/30 uppercase tracking-wide">
+                                  Applied
+                                </span>
+                              )}
+                              {clickedJobs.includes(job.id) && (
+                                <span className="shrink-0 bg-slate-500/15 text-slate-400 text-[8.5px] font-semibold px-1.5 py-0.5 rounded border border-white/5 uppercase">
+                                  Viewed
+                                </span>
+                              )}
+                            </h3>
+                            <p className="text-xs text-slate-400 font-medium mt-0.5 flex flex-wrap items-center gap-1">
+                              <span className="font-bold text-slate-300">{job.company}</span>
+                              <span>&bull;</span>
+                              <span className="italic">{job.location} ({job.locationModel})</span>
+                              {job.country && (
+                                <>
+                                  <span>&bull;</span>
+                                  <span className="text-[10.5px] text-cyan-400 font-extrabold uppercase">{job.country}</span>
+                                </>
+                              )}
+                              {job.source && (
+                                <>
+                                  <span>&bull;</span>
+                                  <span className="text-[9.5px] text-purple-400 font-bold bg-purple-500/10 px-1.5 py-0.5 rounded border border-purple-500/20">{job.source}</span>
+                                </>
+                              )}
+                            </p>
+                          </div>
+
+                          <div className="text-right shrink-0">
+                            {user.resumeText ? (
+                              hasScore ? (
+                                <span className={`text-[10px] font-mono font-black px-2.5 py-0.5 rounded-full ${scoreColorClass}`}>
+                                  {score}% MATCH
+                                </span>
+                              ) : (
+                                <span className="text-[9px] text-slate-400 italic">calibrating tech index...</span>
+                              )
+                            ) : (
+                              <span 
+                                title="Please upload resume to check score"
+                                className="text-[9px] font-medium text-slate-500 bg-slate-950/40 border border-white/5 px-2 py-0.5 rounded"
+                              >
+                                Match Locked
+                              </span>
+                            )}
+                            <p className="text-[10px] text-slate-500 mt-1 font-mono">{job.salaryRange}</p>
+                          </div>
+                        </div>
+
+                        {/* Collapsed view only displays truncated detail block */}
+                        {!isCurrentlySelected && (
+                          <>
+                            <p className="text-slate-400 text-[11px] leading-relaxed mt-2.5 line-clamp-2">
+                              {job.description}
+                            </p>
+
+                            <div className="mt-3 flex flex-wrap gap-1">
+                              {job.tags.slice(0, 4).map((tag) => (
+                                <span key={tag} className="px-2 py-0.5 bg-white/5 group-hover:bg-cyan-500/5 hover:text-cyan-300 rounded text-[9px] text-slate-450 font-medium transition-colors">
+                                  {tag}
+                                </span>
+                              ))}
+                            </div>
+                          </>
+                        )}
+                      </div>
                     </div>
 
-                    <div className="flex-1 min-w-0">
-                      <div className="flex justify-between items-start gap-2">
-                        <div>
-                          <h3 className="font-bold text-sm text-white group-hover:text-cyan-300 transition-colors flex flex-wrap items-center gap-1.5 truncate">
-                            <span className="truncate">{job.title}</span>
-                            {appliedJobs.includes(job.id) && (
-                              <span className="shrink-0 bg-emerald-500/15 text-emerald-300 text-[8.5px] font-extrabold px-1.5 py-0.5 rounded border border-emerald-500/30 uppercase tracking-wide">
-                                Applied
-                              </span>
-                            )}
-                            {clickedJobs.includes(job.id) && (
-                              <span className="shrink-0 bg-slate-500/15 text-slate-400 text-[8.5px] font-semibold px-1.5 py-0.5 rounded border border-white/5 uppercase">
-                                Viewed
-                              </span>
-                            )}
-                          </h3>
-                          <p className="text-xs text-slate-400 font-medium mt-0.5 flex flex-wrap items-center gap-1">
-                            <span className="font-semibold text-slate-300">{job.company}</span>
-                            <span>&bull;</span>
-                            <span className="italic">{job.location} ({job.locationModel})</span>
-                            {job.country && (
-                              <>
-                                <span>&bull;</span>
-                                <span className="text-[10.5px] text-cyan-400 font-bold uppercase">{job.country}</span>
-                              </>
-                            )}
-                            {job.source && (
-                              <>
-                                <span>&bull;</span>
-                                <span className="text-[10px] text-purple-400 font-bold bg-purple-500/10 px-1.5 py-0.5 rounded border border-purple-500/20">{job.source}</span>
-                              </>
-                            )}
+                    {/* Expanded inline Apply & calibration block */}
+                    {isCurrentlySelected && (
+                      <div 
+                        className="border-t border-white/5 pt-4.5 space-y-5" 
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {/* Company vacancy context summary */}
+                        <div className="space-y-1.5">
+                          <h4 className="text-[10.5px] uppercase tracking-wider font-extrabold text-cyan-400 flex items-center gap-1.5">
+                            <Info className="w-3.5 h-3.5 text-cyan-400" /> Full Position Description
+                          </h4>
+                          <p className="text-[11.5px] leading-relaxed text-slate-300 bg-slate-950/30 p-3.5 rounded-2xl border border-white/5 whitespace-pre-wrap select-text">
+                            {job.description}
                           </p>
                         </div>
 
-                        <div className="text-right shrink-0">
+                        {/* Duties and responsibilities */}
+                        {job.responsibilities && job.responsibilities.length > 0 && (
+                          <div className="space-y-1.5">
+                            <h4 className="text-[10.5px] uppercase tracking-wider font-extrabold text-cyan-400 flex items-center gap-1.5">
+                              <Briefcase className="w-3.5 h-3.5 text-purple-400" /> Core Duties & Responsibilities
+                            </h4>
+                            <ul className="text-[11px] text-slate-300 space-y-1.5 font-sans">
+                              {job.responsibilities.map((resp, i) => (
+                                <li key={i} className="flex gap-2 items-start bg-slate-950/25 px-3 py-2 rounded-xl border border-white/5">
+                                  <span className="text-emerald-450 font-bold text-xs select-none mt-0.5">✓</span>
+                                  <span>{resp}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+
+                        {/* Tech Stack elements */}
+                        <div className="space-y-1.5">
+                          <h4 className="text-[10.5px] uppercase tracking-wider font-extrabold text-cyan-400 flex items-center gap-1.5">
+                            <SlidersHorizontal className="w-3.5 h-3.5 text-cyan-400" /> Requested Technical Profile
+                          </h4>
+                          <div className="flex flex-wrap gap-1.5 bg-slate-950/20 p-2.5 rounded-2xl border border-white/5">
+                            {job.requirements.map((req, i) => {
+                              const isMatching = user.analysis?.parsedSkills?.some(
+                                s => s.toLowerCase().includes(req.toLowerCase()) || req.toLowerCase().includes(s.toLowerCase())
+                              );
+                              return (
+                                <span 
+                                  key={i} 
+                                  className={`text-[9.5px] px-2.5 py-1 rounded-lg font-mono font-bold flex items-center gap-1 ${
+                                    isMatching 
+                                      ? 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/20' 
+                                      : 'bg-white/5 text-slate-400 border border-white/5'
+                                  }`}
+                                >
+                                  {isMatching ? '✓' : '•'} {req}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        {/* Advanced ATS rating segment with radar visualization */}
+                        <div className="bg-gradient-to-r from-cyan-950/25 to-indigo-950/25 p-5 rounded-3xl border border-cyan-500/20 space-y-4">
+                          <div className="flex items-center gap-2">
+                            <Sparkles className="w-4 h-4 text-cyan-400 animate-pulse" />
+                            <h4 className="text-xs uppercase tracking-wider font-extrabold text-cyan-300">AI ATS Deep Alignment Analytics</h4>
+                          </div>
+
                           {user.resumeText ? (
-                            hasScore ? (
-                              <span className={`text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-full ${scoreColorClass}`}>
-                                {score}% MATCH
-                              </span>
-                            ) : (
-                              <span className="text-[9px] text-slate-400 italic">calibrating...</span>
-                            )
+                            <div className="grid grid-cols-1 md:grid-cols-12 gap-5 items-stretch">
+                              {/* Left parameters metrics */}
+                              <div className="col-span-1 md:col-span-5 space-y-3.5 flex flex-col justify-between">
+                                <div className="bg-slate-950/50 p-3.5 rounded-2xl border border-white/5 space-y-2">
+                                  <div className="flex justify-between items-center text-[10px]">
+                                    <span className="text-slate-400 font-medium">Calibrated ATS Score</span>
+                                    <span className="text-cyan-400 font-bold font-mono">{score}%</span>
+                                  </div>
+                                  <div className="w-full h-1.5 bg-white/5 rounded-full overflow-hidden">
+                                    <div 
+                                      className="h-full bg-cyan-400 rounded-full transition-all duration-1000" 
+                                      style={{ width: `${score}%` }}
+                                    />
+                                  </div>
+                                </div>
+
+                                <div className="space-y-2.5 text-[10px] flex-1 mt-2.5">
+                                  <div>
+                                    <span className="text-emerald-400 font-bold block mb-1">✓ Matching Requirements ({selectedMatch?.matchingSkills?.length || 0})</span>
+                                    <div className="flex flex-wrap gap-1 max-h-24 overflow-y-auto pr-1">
+                                      {selectedMatch?.matchingSkills?.map(s => (
+                                        <span key={s} className="bg-emerald-400/5 text-emerald-300 px-1.5 py-0.5 rounded text-[9.5px] border border-emerald-500/10 font-medium">
+                                          {s}
+                                        </span>
+                                      ))}
+                                      {(!selectedMatch?.matchingSkills || selectedMatch.matchingSkills.length === 0) && (
+                                        <span className="text-slate-500 italic text-[9.5px]">No matches detected.</span>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  <div className="pt-1">
+                                    <span className="text-rose-400 font-bold block mb-1">✗ Gaps to Bridge ({selectedMatch?.missingSkills?.length || 0})</span>
+                                    <div className="flex flex-wrap gap-1 max-h-24 overflow-y-auto pr-1">
+                                      {selectedMatch?.missingSkills?.map(s => (
+                                        <span key={s} className="bg-rose-400/5 text-rose-300 px-1.5 py-0.5 rounded text-[9.5px] border border-rose-500/10 font-medium font-mono">
+                                          {s}
+                                        </span>
+                                      ))}
+                                      {(!selectedMatch?.missingSkills || selectedMatch.missingSkills.length === 0) && (
+                                        <span className="text-slate-550 italic text-[9.5px]">Excellent score coverage achieved!</span>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Right graphics section */}
+                              <div className="col-span-1 md:col-span-7 space-y-3.5 flex flex-col justify-between">
+                                <div className="bg-slate-950/30 p-2.5 rounded-2xl border border-white/5 overflow-hidden flex justify-center items-center">
+                                  <SkillRadarChart 
+                                    requirements={job.requirements}
+                                    matchingSkills={selectedMatch?.matchingSkills || []}
+                                    missingSkills={selectedMatch?.missingSkills || []}
+                                    jobTitle={job.title}
+                                  />
+                                </div>
+
+                                <div className="space-y-1.5">
+                                  <span className="text-[9.5px] uppercase tracking-wider font-extrabold text-slate-450 block">Core Compatibility Logic Reasoning</span>
+                                  <ul className="space-y-1 text-[10.5px] text-slate-355 leading-relaxed list-none">
+                                    {selectedMatch?.reasons?.map((reason, idx) => (
+                                      <li key={idx} className="flex gap-2 items-start">
+                                        <span className="text-cyan-400 font-mono font-bold leading-none select-none mt-1">&bull;</span>
+                                        <span>{reason}</span>
+                                      </li>
+                                    ))}
+                                    {(!selectedMatch?.reasons || selectedMatch.reasons.length === 0) && (
+                                      <li className="text-slate-550 italic">Evaluating credentials matching indices...</li>
+                                    )}
+                                  </ul>
+                                </div>
+                              </div>
+                            </div>
                           ) : (
-                            <span 
-                              title="Please upload resume to check score"
-                              className="text-[9px] font-medium text-slate-500 bg-slate-950/40 border border-white/5 px-2 py-0.5 rounded"
-                            >
-                              Locked
-                            </span>
+                            <div className="bg-slate-950/40 p-4 rounded-3xl border border-white/5 text-center text-xs text-slate-450 leading-relaxed">
+                              Configure and upload your credentials document on the Left Companion Sidebar to run deep structural compatibility mapping.
+                            </div>
                           )}
-                          <p className="text-[10px] text-slate-500 mt-1">{job.salaryRange}</p>
                         </div>
-                      </div>
 
-                      <p className="text-slate-400 text-[11px] leading-relaxed mt-2.5 line-clamp-2">
-                        {job.description}
-                      </p>
-
-                      <div className="mt-3 flex flex-wrap gap-1">
-                        {job.tags.slice(0, 4).map((tag) => (
-                          <span key={tag} className="px-2 py-0.5 bg-white/5 group-hover:bg-cyan-500/5 hover:text-cyan-300 rounded text-[9px] text-slate-400 font-medium transition-colors">
-                            {tag}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })
-            )}
-          </div>
-        </section>
-
-        {/* Right Column (span 3/4): Live match detail breakdown / cover letter generator */}
-        <section className="lg:col-span-3 space-y-6">
-          
-          {/* Active Copilot letters engine */}
-          <div className="bg-gradient-to-br from-cyan-500/10 to-purple-500/10 backdrop-blur-md border border-white/10 rounded-3xl p-6">
-            <div className="flex items-center gap-2 mb-3">
-              <div className="w-2.5 h-2.5 bg-cyan-400 rounded-full animate-pulse"></div>
-              <h2 className="text-xs uppercase tracking-widest text-cyan-400 font-extrabold">AI Copilot Core</h2>
-            </div>
-
-            {selectedMatch ? (
-              <div className="space-y-4">
-                <div>
-                  <h4 className="text-xs font-bold text-white leading-normal truncate">{selectedMatch.job.title}</h4>
-                  <p className="text-[10px] text-slate-400">{selectedMatch.job.company}</p>
-                </div>
-
-                {user.resumeText ? (
-                  <>
-                    {/* Score detail box */}
-                    <div className="bg-slate-950/40 p-3 rounded-2xl border border-white/5 space-y-2">
-                      <div className="flex justify-between items-center text-[10px]">
-                        <span className="text-slate-400 font-medium">ATS Match Accuracy</span>
-                        <span className="text-cyan-400 font-bold font-mono">{selectedMatch.score}%</span>
-                      </div>
-                      <div className="w-full h-1.5 bg-white/5 rounded-full overflow-hidden">
-                        <div 
-                          className="h-full bg-cyan-400 rounded-full transition-all duration-1000" 
-                          style={{ width: `${selectedMatch.score}%` }}
-                        />
-                      </div>
-                    </div>
-
-                    {/* Skill Comparison Radar Chart */}
-                    <SkillRadarChart 
-                      requirements={selectedMatch.job.requirements}
-                      matchingSkills={selectedMatch.matchingSkills}
-                      missingSkills={selectedMatch.missingSkills}
-                      jobTitle={selectedMatch.job.title}
-                    />
-
-                    {/* Reasons alignment bullet */}
-                    <div className="space-y-2">
-                      <p className="text-[10px] uppercase tracking-wider font-extrabold text-slate-400">Match Insights</p>
-                      <ul className="space-y-1.5 text-[11px] text-slate-300 leading-snug">
-                        {selectedMatch.reasons.map((r, i) => (
-                          <li key={i} className="flex gap-1.5">
-                            <span className="text-cyan-400 font-bold">•</span>
-                            <span>{r}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-
-                    {/* Skill Alignment highlights */}
-                    <div className="grid grid-cols-2 gap-2 text-[10px]">
-                      <div>
-                        <span className="text-emerald-400 font-bold block mb-1">✓ Matching ({selectedMatch.matchingSkills.length})</span>
-                        <div className="flex flex-wrap gap-1 max-h-20 overflow-y-auto">
-                          {selectedMatch.matchingSkills.slice(0, 5).map(s => (
-                            <span key={s} className="bg-emerald-400/5 text-emerald-300 px-1.5 py-0.5 rounded text-[9px]">
-                              {s}
+                        {/* Real-time market averages segment */}
+                        <div className="bg-white/5 border border-white/10 rounded-3xl p-5 space-y-3">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider flex items-center gap-1.5">
+                              <DollarSign className="w-3.5 h-3.5 text-cyan-400" /> Live Regional Compensation Benchmarks
                             </span>
-                          ))}
-                          {selectedMatch.matchingSkills.length === 0 && <span className="text-slate-500 italic text-[9px]">None parsed</span>}
-                        </div>
-                      </div>
-
-                      <div>
-                        <span className="text-rose-400 font-bold block mb-1">✗ Missing ({selectedMatch.missingSkills.length})</span>
-                        <div className="flex flex-wrap gap-1 max-h-20 overflow-y-auto">
-                          {selectedMatch.missingSkills.slice(0, 5).map(s => (
-                            <span key={s} className="bg-rose-400/5 text-rose-300 px-1.5 py-0.5 rounded text-[9px]">
-                              {s}
-                            </span>
-                          ))}
-                          {selectedMatch.missingSkills.length === 0 && <span className="text-slate-500 italic text-[9px]">None found</span>}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Action buttons: Direct Apply, Email Poster, and Source Redirection */}
-                    <div className="pt-3 border-t border-white/5 space-y-2 font-sans text-xs">
-                      <div className="grid grid-cols-2 gap-2">
-                        {/* Redirection to Respective Job Portal Source & Backup Copy Link */}
-                        <div className="flex gap-1.5">
-                          <a
-                            id="original-job-link"
-                            href={selectedMatch.job.originalUrl !== '#' ? selectedMatch.job.originalUrl : `https://www.${(selectedMatch.job.source || 'google').toLowerCase()}.com`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex-1 py-2 px-2 text-center bg-white/5 border border-white/10 hover:bg-white/10 text-slate-300 rounded-xl text-[11px] font-bold cursor-pointer transition-all flex items-center justify-center gap-1 min-w-0"
-                          >
-                            <ExternalLink className="w-3 h-3 text-slate-400 shrink-0" />
-                            <span className="truncate">Apply on {selectedMatch.job.source || "Source"}</span>
-                          </a>
-                          
-                          <button
-                            type="button"
-                            title="Copy direct listing link to paste manually"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              const jobUrl = selectedMatch.job.originalUrl !== '#' 
-                                ? selectedMatch.job.originalUrl 
-                                : `https://www.${(selectedMatch.job.source || 'linkedin').toLowerCase()}.com`;
-                              navigator.clipboard.writeText(jobUrl);
-                              setCopyLinkSuccess(selectedMatch.job.id);
-                              setTimeout(() => setCopyLinkSuccess(null), 2000);
-                            }}
-                            className="p-2.5 bg-white/5 border border-white/10 hover:bg-white/10 text-slate-300 rounded-xl transition-all cursor-pointer flex items-center justify-center shrink-0"
-                          >
-                            {copyLinkSuccess === selectedMatch.job.id ? (
-                              <Check className="w-3.5 h-3.5 text-emerald-400 font-bold" />
-                            ) : (
-                              <Clipboard className="w-3.5 h-3.5 text-slate-400" />
+                            {salaryEstimates[job.id] && (
+                              <span className="text-[9px] font-mono font-bold text-emerald-400 px-2 py-0.5 bg-emerald-500/10 rounded-full uppercase border border-emerald-500/20">
+                                Simulated confidence: {salaryEstimates[job.id].confidenceScore}%
+                              </span>
                             )}
-                          </button>
-                        </div>
+                          </div>
 
-                        {/* Direct Email to HR Poster */}
-                        <button
-                          id="copilot-email-hr-btn"
-                          onClick={() => {
-                            setEmailHrRecipient(selectedMatch.job.hrEmail || `careers@${selectedMatch.job.company.toLowerCase().replace(/[^a-z0-9]/g, "")}.com`);
-                            setEmailSubject(`Application: ${selectedMatch.job.title} - ${user.fullName}`);
-                            setEmailBody(generatedLetterText || `Dear Hiring Team,\n\nI am incredibly excited to submit my tailored profile and credentials for the ${selectedMatch.job.title} vacancy at ${selectedMatch.job.company}.\n\nBased on my uploaded resume details, I possess strong alignment with your requested requirements: ${(selectedMatch.job.requirements.slice(0, 3)).join(", ")}.\n\nWarm regards,\n${user.fullName}\n${user.email}`);
-                            setEmailSendSuccess(false);
-                            setEmailModalOpen(true);
-                          }}
-                          className="py-2 px-3 text-center bg-purple-500/10 border border-purple-500/20 hover:bg-purple-500/20 text-purple-300 rounded-xl text-xs font-bold cursor-pointer transition-all flex items-center justify-center gap-1.5"
-                        >
-                          <Mail className="w-3.5 h-3.5 text-purple-400" />
-                          Email HR Poster
-                        </button>
-                      </div>
-
-                      {/* Direct application via NexGen AI Portal */}
-                      {appliedJobs.includes(selectedMatch.job.id) ? (
-                        <div className="py-2 px-3 bg-[#10b981]/25 text-[#34d399] border border-[#10b981]/30 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 select-none">
-                          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                          Dispatched Profile
-                        </div>
-                      ) : (
-                        <button
-                          id="direct-portal-apply-btn"
-                          disabled={applyingJobId !== null}
-                          onClick={async () => {
-                            const jid = selectedMatch.job.id;
-                            setApplyingJobId(jid);
-                            setErrorText(null);
-                            try {
-                              const res = await fetch(`/api/jobs/${jid}/apply`, {
-                                method: "POST",
-                                headers: {
-                                  "Content-Type": "application/json",
-                                  "Authorization": `Bearer ${token}`
-                                },
-                                body: JSON.stringify({ coverLetter: generatedLetterText || "" })
-                              });
-                              const result = await res.json();
-                              if (!res.ok) throw new Error(result.error || "Failed to transmit application profile.");
-                              
-                              setAppliedJobs(prev => [...prev, jid]);
-                              setShowDirectApplyToast(selectedMatch.job.title);
-                              setTimeout(() => setShowDirectApplyToast(null), 4000);
-                              fetchTelemetryActivities(); // Refresh sidebar log immediately!
-                            } catch (err: any) {
-                              console.error("Direct Apply err:", err);
-                              setErrorText(err.message || "Failed to make direct apply.");
-                            } finally {
-                              setApplyingJobId(null);
-                            }
-                          }}
-                          className={`w-full py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                            applyingJobId === selectedMatch.job.id
-                              ? 'bg-white/5 text-slate-400 animate-pulse'
-                              : 'bg-cyan-400 text-slate-900 hover:bg-cyan-300'
-                          }`}
-                        >
-                          {applyingJobId === selectedMatch.job.id ? (
-                            <>
+                          {fetchingSalary ? (
+                            <div className="flex items-center gap-2 py-2 text-slate-500 text-[10.5px]">
                               <svg className="animate-spin h-3.5 w-3.5 text-cyan-400" fill="none" viewBox="0 0 24 24">
                                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                               </svg>
-                              <span>Syncing profile tables...</span>
-                            </>
+                              <span>Contacting region compensation matrices indexes...</span>
+                            </div>
+                          ) : salaryError ? (
+                            <div className="flex justify-between items-center text-[10.5px]">
+                              <span className="text-slate-500">Failed to load system estimates fallback.</span>
+                              <button 
+                                onClick={() => handleFetchSalaryEstimate(job.id, true)}
+                                className="text-cyan-400 hover:underline hover:text-cyan-300 text-[10px] font-bold cursor-pointer"
+                              >
+                                Retry search parameters
+                              </button>
+                            </div>
+                          ) : salaryEstimates[job.id] ? (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <div className="bg-slate-950/40 p-3.5 rounded-2xl border border-white/5 flex flex-col justify-between">
+                                <div className="flex justify-between text-[10px] mb-2 text-slate-400">
+                                  <span className="font-semibold text-slate-400">Regional Comparison:</span>
+                                  <span className="text-[#34d399] font-bold uppercase">{salaryEstimates[job.id].comparisonStatus}</span>
+                                </div>
+                                <div className="h-1.5 bg-white/5 rounded-full flex overflow-hidden">
+                                  <div className="h-full bg-rose-500/10 w-1/3 border-r border-slate-950"></div>
+                                  <div className="h-full bg-cyan-500/10 w-1/3 border-r border-slate-950"></div>
+                                  <div className="h-full bg-emerald-500/10 w-1/3"></div>
+                                </div>
+                                <div className="flex justify-between text-[9px] font-mono text-slate-500 mt-2 leading-tight">
+                                  <span>Low<br />{salaryEstimates[job.id].currency}{salaryEstimates[job.id].marketLow?.toLocaleString()}</span>
+                                  <span className="text-cyan-400 font-bold text-center">Average<br />{salaryEstimates[job.id].currency}{salaryEstimates[job.id].marketAverage?.toLocaleString()}</span>
+                                  <span className="text-right">High<br />{salaryEstimates[job.id].currency}{salaryEstimates[job.id].marketHigh?.toLocaleString()}</span>
+                                </div>
+                              </div>
+
+                              <div className="text-[10.5px] text-slate-355 leading-relaxed flex flex-col justify-center">
+                                <p className="italic text-slate-450 mb-1">Telemetry Grounding Analysis:</p>
+                                <p>{salaryEstimates[job.id].marketInsights}</p>
+                              </div>
+                            </div>
                           ) : (
-                            <>
-                              <Sparkles className="w-3.5 h-3.5" />
-                              Direct Apply Profile Package
-                            </>
+                            <div className="text-left py-1">
+                              <button
+                                onClick={() => handleFetchSalaryEstimate(job.id, true)}
+                                className="px-3.5 py-1.5 bg-white/5 hover:bg-white/10 text-cyan-400 text-[10.5px] font-bold border border-white/5 rounded-xl transition-all shadow cursor-pointer text-center"
+                              >
+                                Unlock Regional Salary Index Rating
+                              </button>
+                            </div>
                           )}
-                        </button>
-                      )}
+                        </div>
 
-                      {/* Cover letter companion button toggle */}
-                      <button
-                        id="copilot-select-btn"
-                        onClick={() => {
-                          setSelectedJobForLetter(selectedMatch.job);
-                          setGeneratedLetterText('');
-                        }}
-                        className="w-full py-2 bg-gradient-to-r from-purple-500/10 to-indigo-500/10 hover:from-purple-500/15 hover:to-indigo-500/15 border border-purple-500/25 text-purple-200 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 cursor-pointer transition-all"
-                      >
-                        <FileText className="w-3.5 h-3.5 text-purple-400" />
-                        Generate custom draft letter
-                      </button>
-                    </div>
-                  </>
-                ) : (
-                  <div className="bg-slate-950/40 p-3 rounded-2xl border border-white/5 text-center text-xs text-slate-400 mt-2">
-                    Please upload resume on the left sidebar in order to score profile alignment.
-                  </div>
-                )}
-              </div>
-            ) : (
-              <p className="text-xs leading-relaxed text-slate-400">
-                Welcome! Select any active career vacancy inside the Matchmaking list to reveal detailed score metrics, requirement alignments, and original posting portals.
-              </p>
-            )}
-          </div>
-
-          {/* Salary Benchmarks & Grounding Card */}
-          {selectedMatch && (
-            <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-3xl p-6 flex flex-col space-y-4">
-              <div className="flex items-center justify-between">
-                <h3 className="text-xs uppercase tracking-widest text-slate-400 font-bold flex items-center gap-1.5">
-                  <DollarSign className="w-3.5 h-3.5 text-cyan-400" />
-                  Salary Grounding Benchmarks
-                </h3>
-                <span className="flex items-center gap-1 text-[9px] font-bold text-cyan-400 px-1.5 py-0.5 bg-cyan-400/5 border border-cyan-400/15 rounded-full uppercase">
-                  <span className="w-1.5 h-1.5 bg-cyan-400 rounded-full animate-pulse"></span>
-                  Live search
-                </span>
-              </div>
-
-              {fetchingSalary ? (
-                <div className="flex flex-col items-center justify-center py-6 text-center space-y-2">
-                  <svg className="animate-spin h-5 w-5 text-cyan-400" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                  </svg>
-                  <span className="text-[10px] text-slate-455 font-medium">Investigating real-time salary indices...</span>
-                </div>
-              ) : salaryError ? (
-                <div className="space-y-2 text-center py-3">
-                  <p className="text-[10px] text-slate-400 leading-normal">{salaryError}</p>
-                  <button
-                    onClick={() => handleFetchSalaryEstimate(selectedMatch.jobId, true)}
-                    className="px-3 py-1 bg-white/5 hover:bg-white/10 text-cyan-400 text-[10px] font-semibold border border-white/10 rounded-lg transition-colors cursor-pointer"
-                  >
-                    Retry search
-                  </button>
-                </div>
-              ) : salaryEstimates[selectedMatch.jobId] ? (
-                <div className="space-y-4">
-                  {/* Gauge Visualization */}
-                  <div className="space-y-2 bg-slate-950/40 p-3.5 rounded-2xl border border-white/5">
-                    <div className="flex justify-between items-center mb-1 text-[10px]">
-                      <span className="text-slate-400 font-medium">Offered Range:</span>
-                      <span className="text-slate-200 font-bold font-mono text-[10px]">{selectedMatch.job.salaryRange}</span>
-                    </div>
-
-                    {/* Scale bar */}
-                    <div className="mt-4 relative">
-                      {/* Bar backgrounds */}
-                      <div className="h-2 bg-white/5 rounded-full flex overflow-hidden">
-                        <div className="h-full bg-rose-450/20 w-1/3 border-r border-slate-950" title="Low percentile"></div>
-                        <div className="h-full bg-cyan-455/20 w-1/3 border-r border-slate-950" title="Average market range"></div>
-                        <div className="h-full bg-emerald-455/20 w-1/3" title="High percentile"></div>
-                      </div>
-
-                      <div className="flex justify-between text-[9px] font-mono text-slate-500 mt-2">
-                        <span>Low Check:<br />{salaryEstimates[selectedMatch.jobId].currency}{salaryEstimates[selectedMatch.jobId].marketLow?.toLocaleString() || 'N/A'}</span>
-                        <span className="text-center text-cyan-400 font-bold">Standard Avg:<br />{salaryEstimates[selectedMatch.jobId].currency}{salaryEstimates[selectedMatch.jobId].marketAverage?.toLocaleString() || 'N/A'}</span>
-                        <span className="text-right">High Check:<br />{salaryEstimates[selectedMatch.jobId].currency}{salaryEstimates[selectedMatch.jobId].marketHigh?.toLocaleString() || 'N/A'}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Market info stats */}
-                  <div className="space-y-2">
-                    <div className="flex justify-between items-center text-[11px]">
-                      <span className="text-slate-400">Position Competitive Index:</span>
-                      <span className={`px-2 py-0.5 rounded text-[10px] uppercase font-extrabold font-mono border ${
-                        salaryEstimates[selectedMatch.jobId].comparisonStatus?.toLowerCase().includes('above') 
-                          ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' 
-                          : salaryEstimates[selectedMatch.jobId].comparisonStatus?.toLowerCase().includes('below')
-                            ? 'bg-rose-500/10 text-rose-400 border-rose-500/20'
-                            : 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20'
-                      }`}>
-                        {salaryEstimates[selectedMatch.jobId].comparisonStatus}
-                      </span>
-                    </div>
-
-                    <p className="text-[11px] text-slate-350 leading-relaxed bg-indigo-950/10 border border-indigo-500/10 p-3 rounded-xl italic">
-                      {salaryEstimates[selectedMatch.jobId].marketInsights}
-                    </p>
-                  </div>
-
-                  {/* Verification Sources citations */}
-                  {salaryEstimates[selectedMatch.jobId].sources && salaryEstimates[selectedMatch.jobId].sources.length > 0 && (
-                    <div className="space-y-1.5 pt-1.5 border-t border-white/5">
-                      <div className="flex justify-between items-center text-[10px]">
-                        <p className="uppercase tracking-wider font-extrabold text-slate-400">Google Grounding Sources</p>
-                        <span className="text-emerald-400 text-[9px] font-bold font-mono">CONFIDENCE: {salaryEstimates[selectedMatch.jobId].confidenceScore || '100'}%</span>
-                      </div>
-                      <div className="space-y-1">
-                        {salaryEstimates[selectedMatch.jobId].sources.slice(0, 3).map((src: any, index: number) => (
-                          <a
-                            key={index}
-                            href={src.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex items-center justify-between p-1.5 bg-slate-950/40 rounded-lg hover:bg-slate-950/80 hover:text-cyan-300 transition-colors text-[9.5px] text-slate-400 border border-white/5 cursor-pointer truncate"
-                          >
-                            <span className="truncate flex items-center gap-1.5 max-w-[85%]">
-                              <Globe className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-                              <span className="truncate font-medium">{src.title}</span>
+                        {/* Customized tailored statement drafts */}
+                        <div className="bg-white/5 border border-white/10 rounded-3xl p-5 space-y-3">
+                          <div className="flex justify-between items-center">
+                            <span className="text-[10px] uppercase font-bold text-slate-450 tracking-wider flex items-center gap-1.5">
+                              <FileText className="w-3.5 h-3.5 text-purple-400" /> Tailored Cover Letter Draft Generator
                             </span>
-                            <ExternalLink className="w-2.5 h-2.5 text-slate-500 shrink-0" />
-                          </a>
-                        ))}
+                            {generatedLetterText && selectedJobForLetter?.id === job.id && (
+                              <button
+                                onClick={() => {
+                                  navigator.clipboard.writeText(generatedLetterText);
+                                  setCopyStatus(true);
+                                  setTimeout(() => setCopyStatus(false), 2050);
+                                }}
+                                className="text-[9.5px] text-cyan-400 font-bold bg-cyan-500/5 hover:bg-cyan-550/10 px-2 py-0.5 rounded border border-cyan-400/15 cursor-pointer"
+                              >
+                                {copyStatus ? '✓ Copied text' : 'Copy letter body'}
+                              </button>
+                            )}
+                          </div>
+
+                          {selectedJobForLetter?.id === job.id ? (
+                            <div className="space-y-3">
+                              <div className="flex flex-col gap-1">
+                                <label className="text-[9px] uppercase font-bold text-slate-505">Provide directives (e.g. emphasize system migration)</label>
+                                <textarea
+                                  value={customLetterInstructions}
+                                  onChange={(e) => setCustomLetterInstructions(e.target.value)}
+                                  rows={2}
+                                  className="bg-slate-950/60 p-2.5 border border-white/10 rounded-xl text-[11px] text-white focus:outline-none focus:ring-1 focus:ring-cyan-500 placeholder:text-slate-655 resize-none w-full leading-normal"
+                                  placeholder="e.g. prioritize microservices, keep tone professional but warm..."
+                                />
+                              </div>
+
+                              <div className="flex gap-2.5">
+                                <button
+                                  onClick={() => setSelectedJobForLetter(null)}
+                                  className="flex-1 py-1.5 bg-white/5 hover:bg-white/10 border border-white/5 rounded-xl text-[10.5px] font-bold text-slate-400 cursor-pointer"
+                                >
+                                  Clear
+                                </button>
+                                <button
+                                  onClick={triggerGenerateCoverLetter}
+                                  disabled={generatingLetter}
+                                  className="flex-1.5 py-1.5 bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-400 hover:to-indigo-500 text-white font-bold rounded-xl text-[10.5px] flex items-center justify-center gap-1.5 disabled:opacity-40 shadow cursor-pointer"
+                                >
+                                  {generatingLetter ? (
+                                    <>
+                                      <svg className="animate-spin h-3.5 w-3.5 text-white" fill="none" viewBox="0 0 24 24">
+                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                      </svg>
+                                      <span>Calibrating draft...</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Sparkles className="w-3.5 h-3.5 text-purple-202 animate-pulse" />
+                                      Generate Pitch Letter
+                                    </>
+                                  )}
+                                </button>
+                              </div>
+
+                              {generatedLetterText && (
+                                <div className="mt-3 bg-slate-950/60 p-3 rounded-2xl border border-white/5 max-h-48 overflow-y-auto text-[10.5px] text-slate-355 leading-relaxed font-sans select-text whitespace-pre-wrap selection:bg-cyan-500/20">
+                                  {generatedLetterText}
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <div>
+                              <button
+                                onClick={() => {
+                                  setSelectedJobForLetter(job);
+                                  setGeneratedLetterText('');
+                                }}
+                                className="flex items-center gap-1.5 px-3.5 py-1.5 bg-white/5 hover:bg-white/10 text-purple-300 hover:text-purple-200 font-bold text-[10.5px] border border-white/5 rounded-xl transition-all cursor-pointer"
+                              >
+                                <FileText className="w-3.5 h-3.5 text-purple-400" />
+                                Draft Tailored Cover Letter using AI
+                              </button>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Interactive handshakes and apply triggers */}
+                        <div className="pt-3 border-t border-white/5 flex flex-col sm:flex-row gap-2.5">
+                          {/* Live Simulator Link */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSimulatedJobForPortal(job);
+                              setExternalPortalModalOpen(true);
+                            }}
+                            className="flex-1 py-2 px-3 bg-white/5 border border-white/10 hover:bg-white/10 text-white rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5 text-cyan-400" />
+                            Apply on {job.source || 'Listing Portal'} (Live Simulator)
+                          </button>
+
+                          {/* Direct email hr manager */}
+                          <button
+                            onClick={() => {
+                              setEmailHrRecipient(job.hrEmail || `careers@${job.company.toLowerCase().replace(/[^a-z0-9]/g, "")}.com`);
+                              setEmailSubject(`Application: ${job.title} - ${user.fullName}`);
+                              setEmailBody(generatedLetterText && selectedJobForLetter?.id === job.id ? generatedLetterText : `Dear Hiring Team,\n\nI am incredibly excited to submit my tailored profile and credentials for the ${job.title} vacancy at ${job.company}.\n\nBased on my uploaded resume details, I possess strong alignment with your requested requirements: ${(job.requirements.slice(0, 3)).join(", ")}.\n\nWarm regards,\n${user.fullName}\n${user.email}`);
+                              setEmailSendSuccess(false);
+                              setEmailModalOpen(true);
+                            }}
+                            className="flex-1 py-2 px-3 bg-purple-500/10 border border-purple-500/20 hover:bg-purple-500/25 text-purple-300 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                          >
+                            <Mail className="w-3.5 h-3.5 text-purple-400" />
+                            Email HR Poster Direct
+                          </button>
+
+                          {/* Direct database sync sync */}
+                          {appliedJobs.includes(job.id) ? (
+                            <div className="flex-1 py-1.5 px-3 bg-emerald-500/15 text-emerald-300 border border-emerald-500/20 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 select-none text-center leading-relaxed">
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                              Dispatched to Pipeline
+                            </div>
+                          ) : (
+                            <button
+                              disabled={applyingJobId !== null}
+                              onClick={async () => {
+                                setApplyingJobId(job.id);
+                                setErrorText(null);
+                                try {
+                                  const coverLetter = (selectedJobForLetter?.id === job.id && generatedLetterText) ? generatedLetterText : "";
+                                  const res = await fetch(`/api/jobs/${job.id}/apply`, {
+                                    method: "POST",
+                                    headers: {
+                                      "Content-Type": "application/json",
+                                      "Authorization": `Bearer ${token}`
+                                    },
+                                    body: JSON.stringify({ coverLetter })
+                                  });
+                                  const result = await res.json();
+                                  if (!res.ok) throw new Error(result.error || "Failed to make local application.");
+                                  
+                                  setAppliedJobs(prev => [...prev, job.id]);
+                                  setShowDirectApplyToast(job.title);
+                                  setTimeout(() => setShowDirectApplyToast(null), 4000);
+                                  fetchTelemetryActivities();
+                                } catch (err: any) {
+                                  console.error("Direct Apply error:", err);
+                                  setErrorText(err.message || "Failed to register apply.");
+                                } finally {
+                                  setApplyingJobId(null);
+                                }
+                              }}
+                              className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                                applyingJobId === job.id
+                                  ? 'bg-white/5 text-slate-400 animate-pulse'
+                                  : 'bg-cyan-400 text-slate-900 hover:bg-cyan-300'
+                              }`}
+                            >
+                              {applyingJobId === job.id ? (
+                                <>
+                                  <svg className="animate-spin h-3.5 w-3.5 text-cyan-455" fill="none" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                  </svg>
+                                  <span>Syncing profile...</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Sparkles className="w-3.5 h-3.5" />
+                                  Direct AI Apply
+                                </>
+                              )}
+                            </button>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  )}
-
-                  {/* Refresh search manual override button */}
-                  <div className="flex justify-end">
-                    <button
-                      onClick={() => handleFetchSalaryEstimate(selectedMatch.jobId, true)}
-                      disabled={fetchingSalary}
-                      className="text-[9px] text-slate-500 hover:text-cyan-400 hover:underline flex items-center gap-1 transition-colors cursor-pointer"
-                    >
-                      <RefreshCw className="w-2.5 h-2.5" />
-                      Rerun Search
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className="text-center py-2">
-                  <button
-                    onClick={() => handleFetchSalaryEstimate(selectedMatch.jobId, true)}
-                    className="px-4 py-1.5 bg-cyan-400 hover:bg-cyan-300 text-slate-900 rounded-xl text-xs font-bold transition-all cursor-pointer shadow"
-                  >
-                    Assess Market Averages
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Cover Letter generation panel */}
-          <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-3xl p-6 flex flex-col">
-            <h3 className="text-xs uppercase tracking-widest text-slate-400 font-bold mb-3 flex items-center gap-1.5">
-              <FileText className="w-3.5 h-3.5 text-purple-400" />
-              Tailored Cover Letter
-            </h3>
-
-            {selectedJobForLetter ? (
-              <div className="space-y-4">
-                <div className="bg-slate-950/40 p-2.5 rounded-xl border border-white/5">
-                  <p className="text-[10px] text-slate-500 font-bold">DRAFTING IN PROGRESS FOR:</p>
-                  <p className="text-xs font-bold text-white truncate">{selectedJobForLetter.title}</p>
-                  <p className="text-[10px] text-slate-400 italic truncate">{selectedJobForLetter.company}</p>
-                </div>
-
-                <div>
-                  <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1.5 tracking-wider">
-                    Persona Adjustments (Optional)
-                  </label>
-                  <textarea
-                    value={customLetterInstructions}
-                    onChange={(e) => setCustomLetterInstructions(e.target.value)}
-                    rows={3}
-                    className="w-full bg-slate-950/60 p-2 border border-white/10 rounded-xl text-[11px] text-white focus:outline-none focus:ring-1 focus:ring-cyan-500 transition-all placeholder:text-slate-600 resize-none"
-                    placeholder="e.g. emphasize React & Distributed architectures, keep it conversational but elegant..."
-                  />
-                </div>
-
-                <div className="flex gap-2">
-                  <button
-                    id="cancel-draft-btn"
-                    onClick={() => setSelectedJobForLetter(null)}
-                    className="flex-1 py-2 bg-white/5 border border-white/5 hover:bg-white/10 rounded-xl text-xs font-bold text-slate-300 transition-all cursor-pointer"
-                  >
-                    Clear Target
-                  </button>
-                  <button
-                    id="generate-cover-letter-btn"
-                    onClick={triggerGenerateCoverLetter}
-                    disabled={generatingLetter}
-                    className="flex-1.5 py-2 bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-400 hover:to-indigo-500 text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-md flex items-center justify-center gap-1.5 disabled:opacity-40"
-                  >
-                    {generatingLetter ? (
-                      <>
-                        <svg className="animate-spin h-3.5 w-3.5 text-white" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                        </svg>
-                        <span>Drafting...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Sparkles className="w-3.5 h-3.5 text-purple-200" />
-                        Draft Letter
-                      </>
                     )}
-                  </button>
-                </div>
 
-                {generatedLetterText && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="space-y-2 mt-4"
-                  >
-                    <div className="flex justify-between items-center text-[10px]">
-                      <span className="font-bold uppercase text-slate-400">Preview Draft</span>
-                      <button
-                        onClick={copyToClipboard}
-                        className="flex items-center gap-1 px-2 py-1 bg-white/5 hover:bg-white/10 border border-white/5 rounded text-cyan-400 hover:text-cyan-350 cursor-pointer transition-colors"
-                      >
-                        {copyStatus ? (
-                          <>
-                            <Check className="w-3 h-3 text-emerald-400" />
-                            <span className="text-emerald-400 text-[9px]">Copied!</span>
-                          </>
-                        ) : (
-                          <>
-                            <Clipboard className="w-3 h-3" />
-                            <span className="text-[9px]">Copy Letter</span>
-                          </>
-                        )}
-                      </button>
-                    </div>
-
-                    <div className="bg-slate-950/60 p-3 rounded-2xl border border-white/10 max-h-56 overflow-y-auto text-[10.5px] text-slate-300 font-sans leading-relaxed whitespace-pre-wrap select-text selection:bg-cyan-500/30">
-                      {generatedLetterText}
-                    </div>
-                  </motion.div>
-                )}
-
-              </div>
-            ) : (
-              <p className="text-xs leading-relaxed text-slate-400 text-center py-4">
-                Select a vacancy in the Matchmaking feed and click <span className="font-semibold text-white">"Apply"</span> to prompt the AI candidate advocate to draft a stunning custom-tailored cover letter based on your resume.
-              </p>
+                  </div>
+                );
+              })}
+              </>
             )}
           </div>
-
-          {/* Market Insights Trends Mock Panel */}
-          <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-3xl p-6 flex flex-col">
-            <h4 className="text-xs uppercase tracking-widest text-slate-400 font-bold mb-4 flex items-center gap-2">
-              <TrendingUp className="w-3.5 h-3.5 text-emerald-400" />
-              Succeeding Industry Trends
-            </h4>
-            <div className="space-y-4">
-              <div>
-                <div className="flex justify-between text-xs mb-1.5 font-medium">
-                  <span className="text-slate-300">Generative AI Specialist</span>
-                  <span className="text-emerald-400 font-bold">+28.3%</span>
-                </div>
-                <div className="w-full h-1.5 bg-white/5 rounded-full overflow-hidden">
-                  <div className="h-full bg-cyan-500 rounded-full w-[85%]"></div>
-                </div>
-              </div>
-              <div>
-                <div className="flex justify-between text-xs mb-1.5 font-medium">
-                  <span className="text-slate-300">Distributed Architecture</span>
-                  <span className="text-emerald-500 font-bold">+16.1%</span>
-                </div>
-                <div className="w-full h-1.5 bg-white/5 rounded-full overflow-hidden">
-                  <div className="h-full bg-purple-500 rounded-full w-[65%]"></div>
-                </div>
-              </div>
-              <div className="pt-2 text-[9.5px] text-slate-500 italic leading-snug">
-                &ldquo;Calculated based on real-time metadata indexing patterns of hiring agencies globally.&rdquo;
-              </div>
-            </div>
-          </div>
-
         </section>
 
       </main>
