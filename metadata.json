@@ -1,0 +1,6 @@
+{
+  "name": "AI-Powered Job Portal",
+  "description": "An AI-driven career portal that registers users, analyzes resumes for fit scores, serves filtered best-matched job postings, and generates tailored cover letters using Gemini.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
