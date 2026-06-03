@@ -26,13 +26,13 @@ if (supabaseUrl && supabaseAnonKey) {
   console.log("No Supabase configuration detected. Operating in Local SQL/JSON fallback mode via db.json.");
 }
 
-const require = createRequire(import.meta.url);
+const myRequire = (typeof require !== "undefined") ? require : createRequire(import.meta.url);
 // @ts-ignore
-let mammothRaw = require("mammoth");
+let mammothRaw = myRequire("mammoth");
 const mammoth = (mammothRaw && mammothRaw.default) ? mammothRaw.default : mammothRaw;
 
 async function parsePdfText(buffer: Buffer): Promise<string> {
-  const pdfParseRaw = require("pdf-parse");
+  const pdfParseRaw = myRequire("pdf-parse");
   const PDFParseClass = pdfParseRaw.PDFParse || (pdfParseRaw.default && pdfParseRaw.default.PDFParse);
   if (PDFParseClass) {
     const parser = new PDFParseClass({ data: buffer });
