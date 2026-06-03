@@ -19,8 +19,8 @@ if (supabaseUrl && supabaseAnonKey) {
   try {
     supabase = createClient(supabaseUrl, supabaseAnonKey);
     console.log("Supabase Client booted successfully! Cloud tracking state enabled.");
-  } catch (err) {
-    console.error("Supabase fail on initialize:", err);
+  } catch (err: any) {
+    console.warn("Supabase fail on initialize:", err?.message || err);
   }
 } else {
   console.log("No Supabase configuration detected. Operating in Local SQL/JSON fallback mode via db.json.");
@@ -28,9 +28,30 @@ if (supabaseUrl && supabaseAnonKey) {
 
 const require = createRequire(import.meta.url);
 // @ts-ignore
-const pdfParse = require("pdf-parse");
-// @ts-ignore
-const mammoth = require("mammoth");
+let mammothRaw = require("mammoth");
+const mammoth = (mammothRaw && mammothRaw.default) ? mammothRaw.default : mammothRaw;
+
+async function parsePdfText(buffer: Buffer): Promise<string> {
+  const pdfParseRaw = require("pdf-parse");
+  const PDFParseClass = pdfParseRaw.PDFParse || (pdfParseRaw.default && pdfParseRaw.default.PDFParse);
+  if (PDFParseClass) {
+    const parser = new PDFParseClass({ data: buffer });
+    try {
+      const textResult = await parser.getText();
+      return textResult.text || "";
+    } finally {
+      await parser.destroy().catch(() => {});
+    }
+  } else {
+    const traditionalParse = typeof pdfParseRaw === "function" ? pdfParseRaw : (pdfParseRaw.default || pdfParseRaw);
+    if (typeof traditionalParse === "function") {
+      const parsed = await traditionalParse(buffer);
+      return parsed.text || "";
+    } else {
+      throw new Error("PDF parser library could not be resolved as class or function");
+    }
+  }
+}
 
 const app = express();
 const PORT = 3000;
@@ -411,12 +432,12 @@ app.post("/api/auth/register", async (req, res) => {
         analysis: null
       });
       if (error) {
-        console.error("Supabase user save error during register:", error);
+        console.warn("Supabase user save warning during register:", error.message || error);
       } else {
         console.log("Supabase user registered successfully in cloud.");
       }
-    } catch (e) {
-      console.error("Supabase register exception:", e);
+    } catch (e: any) {
+      console.warn("Supabase register exception:", e?.message || e);
     }
   }
 
@@ -459,8 +480,8 @@ app.post("/api/auth/login", async (req, res) => {
         saveDB();
         console.log(`Successfully restored user profile ${cleanEmail} from Supabase Cloud cache.`);
       }
-    } catch (e) {
-      console.error("Supabase user login check exception:", e);
+    } catch (e: any) {
+      console.warn("Supabase user login check exception:", e?.message || e);
     }
   }
 
@@ -498,8 +519,8 @@ app.get("/api/auth/user", authenticateToken, async (req: any, res) => {
 
       // Also pull latest telemetry activity logs (clicks, applications, emailed HRs)
       await syncUserHistoryFromSupabase(req.user.id);
-    } catch (e) {
-      console.error("Supabase user profile sync exception:", e);
+    } catch (e: any) {
+      console.warn("Supabase user profile sync exception:", e?.message || e);
     }
   }
   const { password: _, ...userSafe } = req.user;
@@ -527,6 +548,9 @@ app.post("/api/preferences", authenticateToken, async (req: any, res) => {
     skills: Array.isArray(skills) ? skills : []
   };
 
+  // Invalidate matchmaking cache on preferences update
+  delete targetUser.matchedCache;
+
   if (targetUser.resumeText) {
     targetUser.profileCompleted = true;
   }
@@ -541,12 +565,12 @@ app.post("/api/preferences", authenticateToken, async (req: any, res) => {
         profile_completed: targetUser.profileCompleted
       }).eq("id", targetUser.id);
       if (error) {
-        console.error("Supabase update preferences error:", error);
+        console.warn("Supabase update preferences warning:", error.message || error);
       } else {
         console.log("Supabase preferences synced successfully.");
       }
-    } catch (e) {
-      console.error("Supabase update preferences exception:", e);
+    } catch (e: any) {
+      console.warn("Supabase update preferences exception:", e?.message || e);
     }
   }
 
@@ -586,13 +610,13 @@ app.post("/api/jobs/:id/click", authenticateToken, async (req: any, res) => {
         clicked_at: new Date().toISOString()
       });
       if (error) {
-        console.error("Supabase job_clicks insert error:", error);
+        console.warn("Supabase job_clicks insert warning:", error.message || error);
         errorMsg = error.message;
       } else {
         supabaseSynced = true;
       }
     } catch (err: any) {
-      console.error("Supabase job_clicks exception:", err);
+      console.warn("Supabase job_clicks exception:", err?.message || err);
       errorMsg = err.message;
     }
   }
@@ -654,13 +678,13 @@ app.post("/api/jobs/:id/apply", authenticateToken, async (req: any, res) => {
         status: "PENDING_AUDIT"
       });
       if (error) {
-        console.error("Supabase job_applications insert error:", error);
+        console.warn("Supabase job_applications insert warning:", error.message || error);
         errorMsg = error.message;
       } else {
         supabaseSynced = true;
       }
     } catch (err: any) {
-      console.error("Supabase job_applications exception:", err);
+      console.warn("Supabase job_applications exception:", err?.message || err);
       errorMsg = err.message;
     }
   }
@@ -722,13 +746,13 @@ app.post("/api/jobs/:id/email", authenticateToken, async (req: any, res) => {
         sent_at: emailRecord.sentAt
       });
       if (error) {
-        console.error("Supabase job_emails insert error:", error);
+        console.warn("Supabase job_emails insert warning:", error.message || error);
         errorMsg = error.message;
       } else {
         supabaseSynced = true;
       }
     } catch (err: any) {
-      console.error("Supabase job_emails exception:", err);
+      console.warn("Supabase job_emails exception:", err?.message || err);
       errorMsg = err.message;
     }
   }
@@ -954,8 +978,7 @@ app.post("/api/resume/upload", authenticateToken, async (req: any, res) => {
       const buffer = Buffer.from(fileBase64, "base64");
       const lowercaseName = (fileName || "").toLowerCase();
       if (lowercaseName.endsWith(".pdf")) {
-        const parsed = await pdfParse(buffer);
-        parsedText = parsed.text;
+        parsedText = await parsePdfText(buffer);
       } else if (lowercaseName.endsWith(".docx")) {
         const parsed = await mammoth.extractRawText({ buffer });
         parsedText = parsed.value;
@@ -1085,6 +1108,7 @@ app.post("/api/resume/upload", authenticateToken, async (req: any, res) => {
     }
     
     targetUser.profileCompleted = true;
+    delete targetUser.matchedCache;
     saveDB();
 
     // Sync compiled resume analysis and preferences to Supabase
@@ -1128,6 +1152,7 @@ app.post("/api/resume/upload", authenticateToken, async (req: any, res) => {
       }
       
       targetUser.profileCompleted = true;
+      delete targetUser.matchedCache;
       saveDB();
 
       if (supabase) {
@@ -1140,8 +1165,8 @@ app.post("/api/resume/upload", authenticateToken, async (req: any, res) => {
             profile_completed: targetUser.profileCompleted
           }).eq("id", targetUser.id);
           console.log("Supabase localized resume cache updated successfully.");
-        } catch (subErr) {
-          console.error("Supabase localized fallback update failure:", subErr);
+        } catch (subErr: any) {
+          console.warn("Supabase localized fallback update warning:", subErr?.message || subErr);
         }
       }
 
@@ -1205,6 +1230,12 @@ app.get("/api/jobs", (req, res) => {
 app.get("/api/jobs/matched", authenticateToken, async (req: any, res) => {
   const targetUser = db.users.find(u => u.id === req.user.id);
   if (!targetUser) return res.status(404).json({ error: "Session invalid." });
+
+  // Direct Matchmaking Cache Hit Check
+  if (targetUser.matchedCache && !req.query.force) {
+    console.log(`[Cache Hit] Serving cached matchmaking scoring for user ${targetUser.id}`);
+    return res.json({ matches: targetUser.matchedCache });
+  }
 
   if (!targetUser.resumeText) {
     return res.status(400).json({ error: "Please upload your resume to generate matched scores." });
@@ -1391,10 +1422,15 @@ app.get("/api/jobs/matched", authenticateToken, async (req: any, res) => {
 
     // Merge resources and sort globally by score
     const finalMatched = [...aiMatches, ...fallbackMatches].sort((a, b) => b.score - a.score);
+    
+    // Cache the fully calculated matchups
+    targetUser.matchedCache = finalMatched;
+    saveDB();
+
     res.json({ matches: finalMatched });
 
   } catch (error: any) {
-    console.error("Gemini Job Matchmaking Error, resorting to default fast matching:", error);
+    console.warn("Gemini Job Matchmaking Error, resorting to default fast matching:", error.message || error);
     
     const fallbackMatches = preScoredJobs.map(item => {
       const job = item.job;
@@ -1413,6 +1449,10 @@ app.get("/api/jobs/matched", authenticateToken, async (req: any, res) => {
         job
       };
     }).sort((a, b) => b.score - a.score);
+
+    // Cache the fallback matches as well so we do not spam Gemini during a 429 quota exhaustion window
+    targetUser.matchedCache = fallbackMatches;
+    saveDB();
 
     res.json({ matches: fallbackMatches });
   }
@@ -1541,7 +1581,7 @@ app.post("/api/salary-estimates", authenticateToken, async (req: any, res) => {
       sources: uniqueSources
     });
   } catch (error: any) {
-    console.error("Gemini Salary Estimation Error:", error);
+    console.warn("Gemini Salary Estimation Error, resorting to calculated industry scale:", error.message || error);
     // Return standard fallback estimates derived mathematically from the job's listed salaryRange details
     let low = 90000;
     let high = 140000;

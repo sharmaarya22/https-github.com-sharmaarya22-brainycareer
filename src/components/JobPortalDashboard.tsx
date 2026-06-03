@@ -40,7 +40,7 @@ export default function JobPortalDashboard({ user, token, onLogout, onUserUpdate
   const [appliedJobs, setAppliedJobs] = useState<string[]>([]);
   const [appliedJobsDetails, setAppliedJobsDetails] = useState<any[]>([]);
   const [applyingJobId, setApplyingJobId] = useState<string | null>(null);
-  const [showDirectApplyToast, setShowDirectApplyToast] = useState<string | null>(null);
+  const [showDirectApplyToast, setShowDirectApplyToast] = useState<{ title: string; url: string } | null>(null);
   
   // Loaders
   const [loadingJobs, setLoadingJobs] = useState(false);
@@ -267,9 +267,11 @@ export default function JobPortalDashboard({ user, token, onLogout, onUserUpdate
     fetchMeta();
   }, [token]);
 
+  const preferencesString = JSON.stringify(user.preferences || {});
+
   useEffect(() => {
     fetchJobsAndMatches();
-  }, [user.resumeText, user.preferences, locationModelFilter, recentlyPostedOnly, countryFilter, sourceFilter, strictMatchFilter, token]);
+  }, [user.resumeText, preferencesString, locationModelFilter, recentlyPostedOnly, countryFilter, sourceFilter, strictMatchFilter, token]);
 
   // Memoized sorted and filtered processed jobs list to ensure "everything is strictly relevant"
   const processedJobs = React.useMemo(() => {
@@ -535,10 +537,19 @@ export default function JobPortalDashboard({ user, token, onLogout, onUserUpdate
       {/* Success Application Toast Conforming to Spec */}
       {showDirectApplyToast && (
         <div className="relative z-20 max-w-7xl mx-auto mt-4 px-6 w-full">
-          <div className="bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 rounded-2xl p-4 flex gap-3 items-center shadow-lg animate-pulse">
+          <div className="bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 rounded-2xl p-4 flex gap-3 items-center shadow-lg">
             <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
-            <div className="text-xs font-semibold flex-1">
-              Direct Application Transmitted! Your ATS-profile package & customized letter for <strong className="text-white">"{showDirectApplyToast}"</strong> was securely Synced and Dispatched. Status: <span className="font-extrabold text-emerald-300">PENDING AUDIT</span>.
+            <div className="text-xs font-semibold flex-1 leading-normal">
+              Direct Application Transmitted! Your ATS-profile package for <strong className="text-white">"{showDirectApplyToast.title}"</strong> was securely synced. Status: <span className="font-extrabold text-emerald-300">PENDING AUDIT</span>.
+              <br />
+              <a 
+                href={showDirectApplyToast.url} 
+                target="_blank" 
+                rel="noopener noreferrer" 
+                className="inline-flex items-center gap-1.5 text-cyan-400 hover:text-cyan-300 underline font-bold mt-1"
+              >
+                Click here to complete your application on the official job posting page &rarr;
+              </a>
             </div>
             <button
               onClick={() => setShowDirectApplyToast(null)}
@@ -1611,18 +1622,30 @@ ALTER TABLE job_emails DISABLE ROW LEVEL SECURITY;`}
 
                         {/* Interactive handshakes and apply triggers */}
                         <div className="pt-3 border-t border-white/5 flex flex-col sm:flex-row gap-2.5">
-                          {/* Live Simulator Link */}
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setSimulatedJobForPortal(job);
-                              setExternalPortalModalOpen(true);
+                          {/* Live External Job Posting Redirection */}
+                          <a
+                            href={job.originalUrl || "#"}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={async () => {
+                              // Register transition click log on the server
+                              try {
+                                await fetch(`/api/jobs/${job.id}/click`, {
+                                  method: "POST",
+                                  headers: {
+                                    "Authorization": `Bearer ${token}`
+                                  }
+                                });
+                                fetchTelemetryActivities();
+                              } catch (e) {
+                                console.error("Could not register click log:", e);
+                              }
                             }}
-                            className="flex-1 py-2 px-3 bg-white/5 border border-white/10 hover:bg-white/10 text-white rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                            className="flex-1 py-2 px-3 bg-white/5 border border-white/10 hover:bg-white/10 text-white rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 hover:border-cyan-400/30 text-center leading-normal"
                           >
                             <ExternalLink className="w-3.5 h-3.5 text-cyan-400" />
-                            Apply on {job.source || 'Listing Portal'} (Live Simulator)
-                          </button>
+                            Apply on {job.source || 'Listing'} Website &rarr;
+                          </a>
 
                           {/* Direct email hr manager */}
                           <button
@@ -1641,14 +1664,24 @@ ALTER TABLE job_emails DISABLE ROW LEVEL SECURITY;`}
 
                           {/* Direct database sync sync */}
                           {appliedJobs.includes(job.id) ? (
-                            <div className="flex-1 py-1.5 px-3 bg-emerald-500/15 text-emerald-300 border border-emerald-500/20 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 select-none text-center leading-relaxed">
+                            <a
+                              href={job.originalUrl || "#"}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex-1 py-1.5 px-3 bg-emerald-500/15 text-emerald-300 border border-emerald-500/20 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 text-center leading-relaxed hover:bg-emerald-500/25 transition-all text-cyan-200"
+                            >
                               <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                              Dispatched to Pipeline
-                            </div>
+                              Synced &bull; Open Listing Website &rarr;
+                            </a>
                           ) : (
                             <button
                               disabled={applyingJobId !== null}
                               onClick={async () => {
+                                // Strictly open the exact job URL synchronously so that it is NOT blocked by browser popup blockers!
+                                if (job.originalUrl && job.originalUrl !== "#") {
+                                  window.open(job.originalUrl, '_blank', 'noopener,noreferrer');
+                                }
+
                                 setApplyingJobId(job.id);
                                 setErrorText(null);
                                 try {
@@ -1665,8 +1698,8 @@ ALTER TABLE job_emails DISABLE ROW LEVEL SECURITY;`}
                                   if (!res.ok) throw new Error(result.error || "Failed to make local application.");
                                   
                                   setAppliedJobs(prev => [...prev, job.id]);
-                                  setShowDirectApplyToast(job.title);
-                                  setTimeout(() => setShowDirectApplyToast(null), 4000);
+                                  setShowDirectApplyToast({ title: job.title, url: job.originalUrl });
+                                  setTimeout(() => setShowDirectApplyToast(null), 10000);
                                   fetchTelemetryActivities();
                                 } catch (err: any) {
                                   console.error("Direct Apply error:", err);
