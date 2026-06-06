@@ -26,13 +26,27 @@ if (supabaseUrl && supabaseAnonKey) {
   console.log("No Supabase configuration detected. Operating in Local SQL/JSON fallback mode via db.json.");
 }
 
-const myRequire = (typeof require !== "undefined") ? require : createRequire(import.meta.url);
+function safeRequire(pkgName: string) {
+  if (typeof require !== "undefined" && typeof require === "function") {
+    return require(pkgName);
+  }
+  if (typeof import.meta !== "undefined" && import.meta && import.meta.url) {
+    try {
+      const req = createRequire(import.meta.url);
+      return req(pkgName);
+    } catch (e) {
+      console.warn("createRequire failed:", e);
+    }
+  }
+  throw new Error(`Require of "${pkgName}" is not supported in this runtime environment.`);
+}
+
 // @ts-ignore
-let mammothRaw = myRequire("mammoth");
+let mammothRaw = safeRequire("mammoth");
 const mammoth = (mammothRaw && mammothRaw.default) ? mammothRaw.default : mammothRaw;
 
 async function parsePdfText(buffer: Buffer): Promise<string> {
-  const pdfParseRaw = myRequire("pdf-parse");
+  const pdfParseRaw = safeRequire("pdf-parse");
   const PDFParseClass = pdfParseRaw.PDFParse || (pdfParseRaw.default && pdfParseRaw.default.PDFParse);
   if (PDFParseClass) {
     const parser = new PDFParseClass({ data: buffer });
