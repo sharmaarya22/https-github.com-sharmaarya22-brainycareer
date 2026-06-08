@@ -985,6 +985,92 @@ app.get("/api/supabase/check-status", authenticateToken, async (req: any, res) =
 
 function generateLocalResumeAnalysis(text: string, desiredRole: string): any {
   const clean = text.toLowerCase();
+  
+  // Detect candidate career persona from the raw resume text keywords
+  let detectedRole = desiredRole || "Software Developer";
+  let recommendedRoles = ["Software Developer", "Full Stack Engineer", "Systems Architect"];
+  let transitionRoles = ["Senior Engineer", "Lead Developer", "Engineering Architect"];
+  let currentState = "Mid-Level Professional with robust technology capability.";
+  let executiveSummary = "Accomplished engineering profile with extensive foundation across software construction, showcasing solid hands-on experience in modern technology workflows, frameworks, and deployment.";
+  
+  let strategicPlan = [
+    "Year 1: Deepen focus on security best-practices and cloud hosting operations.",
+    "Year 2: Lead delivery of core system services and mentor growing engineering cohorts.",
+    "Year 3: Assume system design oversight and participate in strategic roadmap definitions."
+  ];
+  
+  let keyStrengths: string[] = [
+    "Demonstrated history of system design, performance enhancements, and codebase refactoring.",
+    "Skilled in collaborative development and agile scrum software release loops."
+  ];
+  
+  let skillGaps = [
+    "Advanced cloud container orchestration tooling.",
+    "Deep test coverage pipelines and automated continuous operations."
+  ];
+  
+  let suggestedImprovements = [
+    "Incorporate metrics-driven results (e.g., 'Reduced system response times by 30%').",
+    "Structure professional work experience chronologically and highlight tech stacks utilized in each stint.",
+    "Tailor the opening profile summary precisely around the target company values."
+  ];
+
+  const hasBA = clean.includes("business analyst") || clean.includes("business analysis") || clean.includes("requirements gathering") || clean.includes("wireframe") || clean.includes("user stories") || clean.includes("use cases") || clean.includes("system analyst") || clean.includes("ba ");
+  const hasPMScrum = clean.includes("project manager") || clean.includes("scrum master") || clean.includes("agile coach") || clean.includes("sprint planning") || clean.includes("scrum") || clean.includes("pmp") || clean.includes("csm");
+
+  if (hasBA) {
+    detectedRole = "Business Analyst";
+    recommendedRoles = ["Business Analyst", "Senior Systems Analyst", "Product Owner"];
+    transitionRoles = ["Senior Business Analyst", "Product Manager", "Lead Business Architect"];
+    currentState = "Experienced Business Analyst specializing in requirements translation and functional design.";
+    executiveSummary = "Detail-oriented Business Analyst with a strong background in requirements elicitation, process flow diagrams, gap analysis, and agile collaboration to bridge technical and commercial teams.";
+    keyStrengths = [
+      "Expertise in requirements gathering, user stories authoring, and visual flow design.",
+      "Proficient in SQL data interrogation, data-informed mapping, and mockups scaffolding.",
+      "Adept at facilitating Scrum events, backlog priority pruning, and stakeholder walkthroughs."
+    ];
+    skillGaps = [
+      "Advanced data visualization tools like Tableau / PowerBI dashboards.",
+      "Familiarity with enterprise resource planning (ERP) system integrations."
+    ];
+    strategicPlan = [
+      "Year 1: Consolidate data analytical skills via advanced SQL training and dashboard mastery.",
+      "Year 2: Transition into complex multi-system blueprinting and shadow Product Owners.",
+      "Year 3: Earn a Scrum Product Owner certification and transition into Product Management leadership."
+    ];
+    suggestedImprovements = [
+      "Quantify your accomplishments (e.g., 'Elicited requirements for 4 parallel squads, cutting sprint preparation bottlenecks by 22%').",
+      "Highlight standard modeling techniques used, such as UML sequence flows or BPMN state machines.",
+      "Include certifications like CBAP or CSPO prominently near the top summary header."
+    ];
+  } else if (hasPMScrum) {
+    detectedRole = "Scrum Master / Agile PM";
+    recommendedRoles = ["Scrum Master", "Agile Project Manager", "Agile Coach"];
+    transitionRoles = ["Senior Scrum Master", "Delivery Manager", "Director of Agile Transformation"];
+    currentState = "Agile Leader focused on team empowerment, sprint coordination, and delivery excellence.";
+    executiveSummary = "Empathetic Scrum Master & Project Manager adept in sprint pacing, cross-functional dependencies management, Jira tracking, and removing operational blockades to drive continuous integration.";
+    keyStrengths = [
+      "Excellent mastery over Scrum, Kanban, Lean methodology, and burndown metrics.",
+      "Advanced administration of Jira dashboards, custom filters, and Confluence wiki architectures.",
+      "Proven coach in promoting psychologically safe team behaviors and sprint estimation accuracy."
+    ];
+    skillGaps = [
+      "Scale Agile Framework (SAFe) certifications.",
+      "Handling cloud deployment pipeline visibility on automated dashboards."
+    ];
+    strategicPlan = [
+      "Year 1: Secure SAFe Certification and establish dependency charts across external teams.",
+      "Year 2: Transition up to manage multiple parallel agile release trains (ARTs).",
+      "Year 3: Pivot into a strategic Agile Transformation Consultant or high-level Delivery Director."
+    ];
+    suggestedImprovements = [
+      "Detail your squad velocity optimizations explicitly (e.g., 'Boosted squad delivery velocity by 25% over 3 sprints').",
+      "Specify techniques used for conflict resolution and facilitating retro meetings.",
+      "List agile tools utilized like Jira, Jira Product Discovery, and Miro boards."
+    ];
+  }
+
+  // Extract skills dynamically
   const allPossibleSkills = [
     "react", "node.js", "node", "express", "typescript", "javascript", "python", "pytorch", "tensorflow",
     "django", "fastapi", "flask", "java", "spring", "c++", "c#", "ruby", "rails", "php", "laravel",
@@ -994,51 +1080,33 @@ function generateLocalResumeAnalysis(text: string, desiredRole: string): any {
   ];
 
   const parsedSkills = allPossibleSkills.filter(s => {
-    // Exact match bounded search
     const escaped = s.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
     const regex = new RegExp(`\\b${escaped}\\b`, 'i');
     return regex.test(clean) || clean.includes(s);
   }).map(s => s === "node" || s === "node.js" ? "Node.js" : s.split(" ").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" "));
 
-  const fallbackSkills = parsedSkills.length > 0 ? parsedSkills : ["React", "TypeScript", "Node.js", "SQL", "Cloud Infrastructure"];
+  const fallbackSkills = parsedSkills.length > 0 ? parsedSkills : (
+    hasBA ? ["Business Analysis", "Requirements Gathering", "SQL", "User Stories", "Agile", "Jira"] :
+    hasPMScrum ? ["Scrum", "Kanban", "Jira", "Sprint Planning", "Velocity Tracking", "Waterfall"] :
+    ["React", "TypeScript", "Node.js", "SQL", "Cloud Infrastructure"]
+  );
 
-  // Design standard improvements
-  const suggestedImprovements = [
-    "Incorporate metrics-driven results (e.g., 'Reduced system response times by 30%').",
-    "Structure professional work experience chronologically and highlight tech stacks utilized in each stint.",
-    "Tailor the opening profile summary precisely around the target company values."
-  ];
-
-  const keyStrengths = [
-    `Strong exposure with ${fallbackSkills.slice(0, 3).join(", ")}.`,
-    "Demonstrated history of system design, performance enhancements, and codebase refactoring.",
-    "Skilled in collaborative development and agile scrum software release loops."
-  ];
-
-  const skillGaps = [
-    "Advanced cloud container orchestration tooling.",
-    "Deep test coverage pipelines and automated continuous operations."
-  ];
-
-  const defaultRole = desiredRole || "Software Developer";
-  
   return {
     isApprovedResumeOnly: true,
-    score: Math.min(92, Math.max(72, 70 + Math.floor(fallbackSkills.length * 1.5))),
-    keyStrengths,
+    score: Math.min(94, Math.max(74, 72 + Math.floor(fallbackSkills.length * 1.5))),
+    keyStrengths: [
+      `Strong exposure with ${fallbackSkills.slice(0, 3).join(", ")}.`,
+      ...keyStrengths
+    ],
     skillGaps,
     suggestedImprovements,
     parsedSkills: fallbackSkills,
-    executiveSummary: `Accomplished engineering profile with extensive foundation across software construction, showcasing solid hands-on experience in modern technology workflows, frameworks, and deployment.`,
-    recommendedRoles: [defaultRole, "Full Stack Engineer", "Systems Architect"],
+    executiveSummary,
+    recommendedRoles,
     careerPath: {
-      currentState: "Mid-Level Professional with robust technology capability.",
-      transitionRoles: ["Senior Engineer", "Lead Developer", "Engineering Architect"],
-      strategicPlan: [
-        "Year 1: Deepen focus on security best-practices and cloud hosting operations.",
-        "Year 2: Lead delivery of core system services and mentor growing engineering cohorts.",
-        "Year 3: Assume system design oversight and participate in strategic roadmap definitions."
-      ]
+      currentState,
+      transitionRoles,
+      strategicPlan
     }
   };
 }

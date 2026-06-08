@@ -222,9 +222,20 @@ export default function JobPortalDashboard({ user, token, onLogout, onUserUpdate
     setJobs(prev => [newJob, ...prev]);
   };
 
+  const triggerToast = (title: string, message: string) => {
+    const id = "toast-" + Math.random().toString(36).substring(2, 9);
+    setActiveToasts(prev => [{ id, title, message }, ...prev]);
+    setTimeout(() => {
+      setActiveToasts(prev => prev.filter(t => t.id !== id));
+    }, 6000);
+  };
+
   const handleUpdateUserPlan = (selectedPlan: 'Free' | 'Pro' | 'Enterprise') => {
     setUserPlan(selectedPlan);
-    alert(`Congratulations! You have successfully upgraded to the "${selectedPlan}" credential model. Exclusive AI matching limits configured.`);
+    triggerToast(
+      "Upgrade Successful!",
+      `Congratulations! You have upgraded to the "${selectedPlan}" workspace. Advanced corporate search and ATS metrics are fully enabled.`
+    );
   };
 
   const unreadCount = notifications.filter(n => !n.read).length;
@@ -453,7 +464,7 @@ export default function JobPortalDashboard({ user, token, onLogout, onUserUpdate
                   onClick={() => {
                     localStorage.setItem('virtual_push_permission', 'granted');
                     setPushPermissionStatus('granted');
-                    alert("Aura Push Alerts Enabled! You will now receive visual slide-in push alerts for employer activities.");
+                    triggerToast("Aura Push Enabled!", "Aura Push Alerts are activated. You will now receive visual slide-in push alerts for employer activities.");
                   }}
                   className="px-4 py-2 bg-white text-indigo-700 rounded-xl font-black hover:bg-indigo-100/90 transition-all cursor-pointer shadow-md"
                 >
@@ -487,6 +498,7 @@ export default function JobPortalDashboard({ user, token, onLogout, onUserUpdate
               onRefreshTelemetry={loadJobsDatabase}
               onUploadResume={handleResumeUpload}
               uploadingResume={uploadingResume}
+              onShowToast={triggerToast}
             />
           )}
 
@@ -568,7 +580,7 @@ export default function JobPortalDashboard({ user, token, onLogout, onUserUpdate
               <button
                 onClick={() => {
                   setShowSettingsDrawer(false);
-                  alert("Real-time notifications preferences updated successfully.");
+                  triggerToast("Preferences Saved", "Real-time notifications preferences updated successfully.");
                 }}
                 className="w-full bg-cyan-400 text-slate-950 font-black py-2.5 rounded-xl cursor-pointer"
               >

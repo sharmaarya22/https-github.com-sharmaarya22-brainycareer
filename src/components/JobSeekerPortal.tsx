@@ -25,6 +25,20 @@ CORE EXPERTISE:
 * SQL (PostgreSQL), Databases, REST, GraphQL
 * Tailwind CSS, UI/UX Design Systems, Responsive Interfaces
 * Docker, CI/CD, AWS Cloud Infrastructure, Automation`
+  },
+  ba: {
+    fileName: "sarah_jenkins_business_analyst.txt",
+    fullName: "Sarah Jenkins",
+    text: `SARAH JENKINS - SENIOR BUSINESS ANALYST & PRODUCT OWNER
+Email: sarah.jenkins@deliveryhub.co -- Location: Toronto, ON / Hybrid
+SUMMARY:
+Over 5 years of certified expertise as a professional Business Analyst across banking, CRM integration, and software delivery workflows. Proficient in rigorous requirements gathering, data modeling, mapping functional processes, and authoring concise User Stories and Use Cases. Highly skilled at managing backlog grooming, Facilitating Sprint Planning sessions, and Scrum master duties to bridge systems engineering with corporate commercial priorities.
+
+CORE EXPERTISE:
+* Business Analysis, Requirements Gathering, Process Flow Diagrams, Gap Analysis
+* Agile, Scrum Framework, Backlog Grooming, Sprint Tracking (Jira / Confluence)
+* Wireframing, UX Prototyping (Figma / Balsamiq), User Stories, Use Case Modeling
+* SQL Queries, Data Mapping, Functional Testing, Stakeholder Walkthroughs`
   }
 };
 
@@ -42,6 +56,7 @@ interface JobSeekerPortalProps {
   onRefreshTelemetry: () => void;
   onUploadResume: (fileContent: { text?: string; base64?: string }, fileName: string) => Promise<void>;
   uploadingResume: boolean;
+  onShowToast?: (title: string, message: string) => void;
 }
 
 export default function JobSeekerPortal({ 
@@ -57,13 +72,14 @@ export default function JobSeekerPortal({
   isLiveSupabase, 
   onRefreshTelemetry,
   onUploadResume,
-  uploadingResume
+  uploadingResume,
+  onShowToast
 }: JobSeekerPortalProps) {
   
   const [seekerTab, setSeekerTab] = useState<'jobs' | 'match' | 'resume' | 'letters' | 'interview' | 'tracker' | 'coach' | 'visitors'>('match');
   const [simulatingStep, setSimulatingStep] = useState<string | null>(null);
 
-  const handleLoadDemoProfile = async (type: 'developer') => {
+  const handleLoadDemoProfile = async (type: 'developer' | 'ba') => {
     setSimulatingStep("📥 Received resume credentials...");
     
     const steps = [
@@ -249,7 +265,14 @@ EDUCATION & CERTIFICATION PATHWAYS:
     setIsExporting(type);
     setTimeout(() => {
       setIsExporting(null);
-      alert(`Simulation completed: Successfully compiled & exported your tailored ${resumeStyle} CV format as professional ${type}. Document is mapped under active profile link.`);
+      if (onShowToast) {
+        onShowToast(
+          "Document Render Completed!",
+          `Successfully compiled and exported your tailored standard ${resumeStyle} CV format as a professional ${type} file.`
+        );
+      } else {
+        alert(`Simulation completed: Successfully compiled & exported your tailored ${resumeStyle} CV format as professional ${type}. Document is mapped under active profile link.`);
+      }
     }, 1500);
   };
 
@@ -658,22 +681,34 @@ Please find my customized full-stack credentials enclosed for your immediate con
                     <span className="text-xs uppercase font-extrabold tracking-wider text-indigo-600 font-mono">Autonomous Global Job Matchmaker</span>
                   </div>
                   <h3 className="text-xl font-bold text-slate-900">Your Automated Worldwide Career Matchmaker is Ready</h3>
-                  <p className="text-sm text-slate-650 max-w-4xl leading-relaxed font-semibold">
-                    NexGen AI automatically indexes corporate vacancy portals worldwide to evaluate skill overlaps, compute ATS alignments, and gauge interview success likelihoods. Populate your credentials or select our elite software developer preset to analyze your profile.
+                  <p className="text-sm text-slate-650 max-w-xl leading-relaxed font-semibold">
+                    NexGen AI automatically indexes corporate vacancy portals worldwide to evaluate skill overlaps, compute ATS alignments, and gauge interview success likelihoods. Choose one of our elite presets or upload your own CV file to start.
                   </p>
                 </div>
 
-                <div className="flex flex-col sm:flex-row gap-3.5 shrink-0 font-sans">
+                <div className="flex flex-col lg:flex-row gap-3.5 shrink-0 font-sans">
                   <button
                     onClick={() => handleLoadDemoProfile('developer')}
                     disabled={uploadingResume}
-                    className="p-4 text-left w-full sm:w-[280px] bg-indigo-50/50 hover:bg-indigo-50 border border-indigo-100 rounded-2xl transition-all font-sans cursor-pointer group shadow-sm"
+                    className="p-4 text-left w-full lg:w-[240px] bg-indigo-50/50 hover:bg-indigo-50 border border-indigo-100 rounded-2xl transition-all font-sans cursor-pointer group shadow-sm"
                   >
                     <div className="flex items-center justify-between gap-1">
-                      <span className="text-sm font-bold text-indigo-900 block group-hover:text-indigo-75 transition-colors">Alex Mercer CV Preset</span>
+                      <span className="text-sm font-bold text-indigo-900 block group-hover:text-indigo-75 transition-colors">Alex Mercer Preset</span>
                       <ChevronRight className="w-4 h-4 text-indigo-500 group-hover:text-indigo-700 transition-colors" />
                     </div>
                     <span className="text-xs text-indigo-650 block mt-1.5 font-mono font-medium">Software Lead (React, Node, Cloud, TS)</span>
+                  </button>
+
+                  <button
+                    onClick={() => handleLoadDemoProfile('ba')}
+                    disabled={uploadingResume}
+                    className="p-4 text-left w-full lg:w-[240px] bg-emerald-50/30 hover:bg-emerald-50 border border-emerald-100 rounded-2xl transition-all font-sans cursor-pointer group shadow-sm"
+                  >
+                    <div className="flex items-center justify-between gap-1">
+                      <span className="text-sm font-bold text-emerald-950 block group-hover:text-emerald-75 transition-colors">Sarah Jenkins Preset</span>
+                      <ChevronRight className="w-4 h-4 text-emerald-500 group-hover:text-emerald-700 transition-colors" />
+                    </div>
+                    <span className="text-xs text-emerald-650 block mt-1.5 font-mono font-medium">Business Analyst (SQL, BA, Jira, Scrum)</span>
                   </button>
                 </div>
               </div>
@@ -1200,14 +1235,14 @@ Please find my customized full-stack credentials enclosed for your immediate con
       )}
 
       {seekerTab === 'resume' && (
-        <div className="border border-white/5 bg-slate-900/10 rounded-2xl p-5 space-y-6">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div className="border border-slate-200 bg-white rounded-3xl p-6 space-y-6 shadow-sm">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-4 border-b border-slate-100">
             <div>
-              <span className="text-[10px] uppercase font-bold text-cyan-400 tracking-wider font-mono">
+              <span className="text-[10px] uppercase font-bold text-indigo-600 tracking-wider font-mono">
                 Resume Intelligence Console
               </span>
-              <h3 className="text-sm font-black text-white">Parser & Taylored ATS CV Builder</h3>
-              <p className="text-xs text-slate-400">Analyze current upload statistics or trigger clean templates generation.</p>
+              <h3 className="text-base font-black text-slate-900 leading-tight mt-1">Analytics & Tailored ATS CV Builder</h3>
+              <p className="text-xs text-slate-500 mt-0.5 font-medium">Analyze current upload statistics or trigger clean templates generation.</p>
             </div>
 
             <div className="w-fit">
@@ -1220,39 +1255,39 @@ Please find my customized full-stack credentials enclosed for your immediate con
             <div className="lg:col-span-1 space-y-4">
               
               {/* Score card */}
-              <div className="p-4 rounded-xl border border-white/5 bg-slate-950/40 text-center space-y-2">
-                <span className="text-[9px] uppercase font-extrabold text-slate-400 tracking-widest font-mono">COMPREHENSIVE PARSE SCORE</span>
-                <p className="text-4xl font-extrabold text-cyan-400 font-mono leading-none">{user.analysis?.score || 60}<span className="text-xs text-slate-500">/100</span></p>
-                <p className="text-[10px] text-slate-400 font-sans mt-1">Evaluated matching indices on desired: <strong className="text-white font-bold">{user.preferences?.desiredRole || 'Flexible'}</strong></p>
+              <div className="p-5 rounded-2xl border border-slate-200 bg-slate-50 text-center space-y-2">
+                <span className="text-[9.5px] uppercase font-bold text-slate-500 tracking-widest font-mono">COMPREHENSIVE PARSE SCORE</span>
+                <p className="text-4xl font-extrabold text-indigo-600 font-mono leading-none font-black">{user.analysis?.score || 60}<span className="text-xs text-slate-400">/100</span></p>
+                <p className="text-[10.5px] text-slate-600 font-sans mt-1.5 font-medium">Evaluated matching indices on desired role: <strong className="text-slate-850 font-bold">{user.preferences?.desiredRole || 'Flexible'}</strong></p>
               </div>
 
               {/* Recommendations certificate gaps */}
-              <div className="p-4 rounded-xl border border-indigo-500/10 bg-indigo-950/10 space-y-3">
-                <h4 className="text-[10px] uppercase font-black text-slate-400 tracking-widest flex items-center gap-1">
-                  <Award className="w-4 h-4 text-indigo-400" />
+              <div className="p-5 rounded-2xl border border-indigo-100 bg-indigo-50/50 space-y-3.5 animate-pulse">
+                <h4 className="text-[10.5px] uppercase font-black text-indigo-805 tracking-wider flex items-center gap-1">
+                  <Award className="w-4 h-4 text-indigo-600" />
                   <span>Missing Certifications Roadmap</span>
                 </h4>
-                <div className="space-y-1.5 text-[11px] text-slate-300">
-                  <div className="p-1 px-2.5 bg-slate-950/40 border border-white/5 rounded-lg">
-                    • <strong className="text-indigo-300">Certified Kubernetes Administrator (CKA)</strong> - highly desired for continuous Cloud Run infrastructure nodes tasks.
+                <div className="space-y-2 text-[11px] text-slate-700">
+                  <div className="p-2.5 bg-white border border-indigo-100/70 rounded-xl text-slate-800 font-medium shadow-2xs">
+                    • <strong className="text-indigo-700 font-bold">Certified Scrum Master (CSM) or CBAP</strong> - highly desired for continuous analytical coordination.
                   </div>
-                  <div className="p-1 px-2.5 bg-slate-950/40 border border-white/5 rounded-lg">
-                    • <strong className="text-indigo-300">AWS DevOps Engineer Associate</strong> - adds 15%+ score advantage in system pipeline evaluation engines.
+                  <div className="p-2.5 bg-white border border-indigo-100/70 rounded-xl text-slate-800 font-medium shadow-2xs">
+                    • <strong className="text-indigo-700 font-bold">PMI Agile Certified Practitioner (PMP)</strong> - adds 15%+ score advantage in system alignment.
                   </div>
                 </div>
               </div>
 
               {/* Builder Configure */}
-              <div className="p-4 rounded-xl border border-white/5 bg-slate-950/40 space-y-3.5">
-                <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">AI Resume Builder Panel</span>
+              <div className="p-5 rounded-2xl border border-slate-200 bg-slate-50 space-y-4">
+                <span className="text-[10.5px] uppercase font-bold text-slate-605 tracking-wider block">AI Resume Builder Panel</span>
                 
-                <div className="space-y-2.5">
+                <div className="space-y-3.5">
                   <div className="space-y-1 text-xs">
-                    <label className="text-slate-400">Select Career Target Template</label>
+                    <label className="text-slate-500 font-semibold block">Select Career Target Template</label>
                     <select
                       value={resumeTemplate}
                       onChange={e => setResumeTemplate(e.target.value as any)}
-                      className="w-full bg-slate-950 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-cyan-400 cursor-pointer"
+                      className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-indigo-500 hover:border-slate-350 cursor-pointer shadow-2xs"
                     >
                       <option value="Developer">Full-Stack Application Developer</option>
                       <option value="Executive">Executive Leadership CV</option>
@@ -1262,11 +1297,11 @@ Please find my customized full-stack credentials enclosed for your immediate con
                   </div>
 
                   <div className="space-y-1 text-xs">
-                    <label className="text-slate-400">Select Export Preset Theme</label>
+                    <label className="text-slate-500 font-semibold block">Select Export Preset Theme</label>
                     <select
                       value={resumeStyle}
                       onChange={e => setResumeStyle(e.target.value as any)}
-                      className="w-full bg-slate-950 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-cyan-400 cursor-pointer"
+                      className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-indigo-500 hover:border-slate-350 cursor-pointer shadow-2xs"
                     >
                       <option value="ATS">ATS-Optimized Formatting (No columns)</option>
                       <option value="Executive">Executive Leadership (Double-Line)</option>
@@ -1279,9 +1314,9 @@ Please find my customized full-stack credentials enclosed for your immediate con
 
                 <button
                   onClick={triggerBulidResume}
-                  className="w-full bg-cyan-400 text-slate-950 text-xs font-black py-2 rounded-lg hover:bg-cyan-300 transition-all cursor-pointer inline-flex items-center justify-center gap-1"
+                  className="w-full bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold py-2.5 rounded-xl transition-all cursor-pointer inline-flex items-center justify-center gap-1.5 shadow-md shadow-indigo-100"
                 >
-                  <Cpu className="w-3.5 h-3.5 fill-slate-950" />
+                  <Cpu className="w-3.5 h-3.5 text-white" />
                   Format Tailored Resume
                 </button>
               </div>
@@ -1291,9 +1326,9 @@ Please find my customized full-stack credentials enclosed for your immediate con
             <div className="lg:col-span-2 space-y-4">
               {generatedResume ? (
                 <div className="space-y-3.5">
-                  <div className="flex justify-between items-center bg-slate-950 p-2.5 px-4 rounded-xl border border-white/5 text-xs">
-                    <span className="font-bold text-white flex items-center gap-1 font-mono">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-slate-50 p-3 px-4 rounded-2xl border border-slate-200 text-xs gap-3">
+                    <span className="font-bold text-slate-805 flex items-center gap-2 font-sans">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
                       Resume Ready ({resumeStyle} Preset Style Loaded)
                     </span>
 
@@ -1301,30 +1336,32 @@ Please find my customized full-stack credentials enclosed for your immediate con
                       <button
                         onClick={() => triggerSimulatedExport('PDF')}
                         disabled={!!isExporting}
-                        className="px-2.5 py-1 text-[11px] font-bold text-cyan-400 hover:bg-cyan-400/10 rounded animate-pulse cursor-pointer"
+                        className="px-3 py-1.5 text-xs font-bold bg-white hover:bg-slate-100 border border-slate-250 hover:border-slate-350 text-indigo-700 rounded-lg cursor-pointer transition-all shadow-2xs"
                       >
                         {isExporting === 'PDF' ? 'Compiling PDF...' : 'Download PDF'}
                       </button>
                       <button
                         onClick={() => triggerSimulatedExport('DOCX')}
                         disabled={!!isExporting}
-                        className="px-2.5 py-1 text-[11px] font-bold text-cyan-400 hover:bg-cyan-400/10 rounded cursor-pointer"
+                        className="px-3 py-1.5 text-xs font-bold bg-white hover:bg-slate-100 border border-slate-250 hover:border-slate-350 text-indigo-700 rounded-lg cursor-pointer transition-all shadow-2xs"
                       >
                         {isExporting === 'DOCX' ? 'Compiling DOCX...' : 'Download DOCX'}
                       </button>
                     </div>
                   </div>
 
-                  <pre className="p-4 bg-slate-950 border border-white/5 rounded-xl text-[10.5px] text-slate-300 font-mono leading-relaxed whitespace-pre-wrap max-h-[420px] overflow-y-auto">
+                  <pre className="p-4 bg-slate-50 border border-slate-200 rounded-2xl text-[11px] text-slate-700 font-mono leading-relaxed whitespace-pre-wrap max-h-[460px] overflow-y-auto shadow-inner">
                     {generatedResume}
                   </pre>
                 </div>
               ) : (
-                <div className="text-center py-20 bg-slate-950/20 border border-dashed border-white/5 rounded-2xl text-slate-500 text-xs flex flex-col justify-center items-center space-y-3.5">
-                  <FileText className="w-10 h-10 text-slate-600 animate-pulse" />
+                <div className="text-center py-24 bg-white border border-dashed border-slate-200 rounded-3xl text-slate-400 text-xs flex flex-col justify-center items-center space-y-4 shadow-2xs">
+                  <div className="p-4 bg-slate-50 border border-slate-100 rounded-2xl">
+                    <FileText className="w-8 h-8 text-slate-401" />
+                  </div>
                   <div>
-                    <span className="block font-bold text-slate-400">AI Tailored CV Builder is Idle</span>
-                    <p className="text-[10px] text-slate-500 mt-1 max-w-sm">Select target layout parameters and click &ldquo;Format Tailored Resume&rdquo; to build high-performance CV copies instantly.</p>
+                    <span className="block font-bold text-slate-700">AI Tailored CV Builder is Ready</span>
+                    <p className="text-[10.5px] text-slate-500 mt-1 max-w-sm leading-relaxed font-semibold">Select target layout parameters and click &ldquo;Format Tailored Resume&rdquo; to build high-performance CV copies instantly.</p>
                   </div>
                 </div>
               )}
@@ -1335,27 +1372,27 @@ Please find my customized full-stack credentials enclosed for your immediate con
       )}
 
       {seekerTab === 'letters' && (
-        <div className="border border-white/5 bg-slate-900/10 rounded-2xl p-5 space-y-5">
-          <div>
-            <span className="text-[10px] uppercase font-bold text-cyan-400 tracking-wider font-mono">
+        <div className="border border-slate-200 bg-white rounded-3xl p-6 space-y-6 shadow-sm">
+          <div className="pb-4 border-b border-slate-100">
+            <span className="text-[10px] uppercase font-bold text-indigo-600 tracking-wider font-mono">
               AI Cover Letter Studio
             </span>
-            <h3 className="text-sm font-black text-white">Dynamic Letter Personalization Builder</h3>
-            <p className="text-xs text-slate-400">Select target published global opening metrics and select tailored pitch tone styles.</p>
+            <h3 className="text-base font-black text-slate-900 leading-tight mt-1">Dynamic Letter Personalization Builder</h3>
+            <p className="text-xs text-slate-500 mt-0.5 font-medium">Select target published global opening metrics and select tailored pitch tone styles.</p>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             
-            <div className="lg:col-span-1 border border-white/5 rounded-xl p-4 bg-slate-950/40 space-y-3.5">
-              <div className="space-y-1 text-xs">
-                <label className="text-slate-400">Select Target Role</label>
+            <div className="lg:col-span-1 border border-slate-200 rounded-2xl p-5 bg-slate-50 space-y-4">
+              <div className="space-y-1.5 text-xs">
+                <label className="text-slate-600 font-semibold block">Select Target Role</label>
                 <select
                   value={selectedJobForLetter?.id || ""}
                   onChange={e => {
                     const found = jobs.find(j => j.id === e.target.value);
                     if (found) setSelectedJobForLetter(found);
                   }}
-                  className="w-full bg-slate-950 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-cyan-400 cursor-pointer"
+                  className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-indigo-500 cursor-pointer shadow-2xs"
                 >
                   <option value="" disabled>-- Choose Job Openings --</option>
                   {jobs.map(j => (
@@ -1364,22 +1401,22 @@ Please find my customized full-stack credentials enclosed for your immediate con
                 </select>
               </div>
 
-              <div className="space-y-1 text-xs">
-                <label className="text-slate-400">Configure Writing Style Accent</label>
-                <div className="grid grid-cols-2 gap-1.5">
+              <div className="space-y-1.5 text-xs">
+                <label className="text-slate-600 font-semibold block">Configure Writing Style Accent</label>
+                <div className="grid grid-cols-2 gap-2">
                   {[
                     { id: 'formal', label: 'Formal Version' },
                     { id: 'creative', label: 'Creative Style' },
                     { id: 'executive', label: 'Executive Leadership' },
                     { id: 'startup', label: 'Startup Punchy Accent' }
                   ].map(styleOpt => (
-                    <label key={styleOpt.id} className="flex items-center gap-1.5 p-2 bg-slate-950 rounded-lg border border-white/5 text-[10.5px] cursor-pointer hover:border-white/10 text-slate-300">
+                    <label key={styleOpt.id} className="flex items-center gap-1.5 p-2 bg-white rounded-xl border border-slate-200 text-[10.5px] cursor-pointer hover:border-slate-300 text-slate-700 font-medium shadow-2xs">
                       <input 
                         type="radio" 
                         name="style_opt" 
                         checked={letterStyle === styleOpt.id} 
                         onChange={() => setLetterStyle(styleOpt.id as any)}
-                        className="accent-cyan-400"
+                        className="accent-indigo-600"
                       />
                       <span>{styleOpt.label}</span>
                     </label>
@@ -1387,23 +1424,23 @@ Please find my customized full-stack credentials enclosed for your immediate con
                 </div>
               </div>
 
-              <div className="space-y-1 text-xs font-sans">
-                <label className="text-slate-400">Insert Specific Custom Prompts</label>
+              <div className="space-y-1.5 text-xs font-sans">
+                <label className="text-slate-600 font-semibold block">Insert Specific Custom Prompts</label>
                 <textarea
                   value={customInstructions}
                   onChange={e => setCustomInstructions(e.target.value)}
                   rows={3}
                   placeholder="e.g. highlight team management expertise using scaled REST frameworks metrics..."
-                  className="w-full bg-slate-950 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-cyan-400 resize-none placeholder-slate-600"
+                  className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-indigo-500 resize-none placeholder-slate-400 shadow-2xs"
                 />
               </div>
 
               <button
                 onClick={triggerLetterGen}
                 disabled={generatingLetter || !selectedJobForLetter}
-                className="w-full bg-cyan-400 text-slate-950 text-xs font-black py-2.5 rounded-lg hover:bg-cyan-300 transition-all cursor-pointer inline-flex items-center justify-center gap-1"
+                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black py-2.5 rounded-xl transition-all cursor-pointer inline-flex items-center justify-center gap-1.5 shadow-md shadow-indigo-150 disabled:opacity-50"
               >
-                <Sparkles className="w-3.5 h-3.5 fill-slate-950 animate-bounce" />
+                <Sparkles className="w-3.5 h-3.5 text-white animate-bounce" />
                 {generatingLetter ? 'Generating Letter...' : 'Generate Cover Letter'}
               </button>
             </div>
@@ -1411,9 +1448,9 @@ Please find my customized full-stack credentials enclosed for your immediate con
             <div className="lg:col-span-2 space-y-3">
               {customLetterText ? (
                 <div className="space-y-3 text-xs font-sans">
-                  <div className="flex justify-between items-center bg-slate-950 p-2.5 rounded-xl border border-white/5">
-                    <span className="font-extrabold text-white flex items-center gap-1">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-400 animate-pulse" />
+                  <div className="flex justify-between items-center bg-slate-50 p-3 px-4 rounded-xl border border-slate-200">
+                    <span className="font-extrabold text-slate-800 flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 animate-pulse" />
                       Letter Tailored For: {selectedJobForLetter?.company}
                     </span>
                     <button
@@ -1422,7 +1459,7 @@ Please find my customized full-stack credentials enclosed for your immediate con
                         setCopyStatus(true);
                         setTimeout(() => setCopyStatus(false), 1500);
                       }}
-                      className="text-cyan-400 text-[11px] font-bold font-mono inline-flex items-center gap-1 hover:underline cursor-pointer"
+                      className="text-indigo-600 text-[11px] font-bold font-sans inline-flex items-center gap-1 hover:underline cursor-pointer bg-white px-2.5 py-1 rounded-lg border border-slate-200 shadow-2xs hover:bg-slate-50 transition-colors"
                     >
                       {copyStatus ? 'Copied Content!' : 'Copy Letter'}
                     </button>
@@ -1432,15 +1469,17 @@ Please find my customized full-stack credentials enclosed for your immediate con
                     value={customLetterText}
                     onChange={e => setCustomLetterText(e.target.value)}
                     rows={12}
-                    className="w-full bg-slate-950 border border-white/14 rounded-xl p-4 text-[11px] text-slate-200 font-sans leading-relaxed focus:outline-none focus:border-cyan-400 resize-none font-medium text-justify"
+                    className="w-full bg-slate-50/50 border border-slate-200 rounded-2xl p-4 text-[11px] text-slate-705 font-mono leading-relaxed focus:outline-none focus:border-indigo-500 resize-none font-medium shadow-inner"
                   />
                 </div>
               ) : (
-                <div className="text-center py-24 bg-slate-950/20 border border-dashed border-white/5 rounded-2xl text-slate-500 text-xs flex flex-col justify-center items-center space-y-3.5">
-                  <Bot className="w-10 h-10 text-slate-600" />
+                <div className="text-center py-24 bg-white border border-dashed border-slate-200 rounded-3xl text-slate-400 text-xs flex flex-col justify-center items-center space-y-4 shadow-2xs">
+                  <div className="p-4 bg-slate-50 border border-slate-100 rounded-2xl">
+                    <Bot className="w-8 h-8 text-slate-401" />
+                  </div>
                   <div>
-                    <span className="block font-bold text-slate-400">Smart Cover Letter Studio is Idle</span>
-                    <p className="text-[10px] text-slate-500 mt-1 max-w-sm">Select target corporate job properties on the left panel & click &ldquo;Generate Cover Letter&rdquo; to draft high-scoring matching pitches.</p>
+                    <span className="block font-bold text-slate-700">Cover Letter Studio is Ready</span>
+                    <p className="text-[10.5px] text-slate-500 mt-1 max-w-sm leading-relaxed font-semibold">Select target corporate job properties on the left panel & click &ldquo;Generate Cover Letter&rdquo; to draft high-scoring matching pitches.</p>
                   </div>
                 </div>
               )}
@@ -1451,22 +1490,22 @@ Please find my customized full-stack credentials enclosed for your immediate con
       )}
 
       {seekerTab === 'interview' && (
-        <div className="border border-white/5 bg-slate-900/10 rounded-2xl p-5 space-y-5">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div className="border border-slate-200 bg-white rounded-3xl p-6 space-y-6 shadow-sm">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-4 border-b border-slate-100">
             <div>
-              <span className="text-[10px] uppercase font-bold text-cyan-400 tracking-wider font-mono">
-                AISTUDIO MOCK INTERVIEW ADVOCATE
+              <span className="text-[10px] uppercase font-bold text-indigo-600 tracking-wider font-mono block">
+                AURA MOCK INTERVIEW ADVOCATE
               </span>
-              <h3 className="text-sm font-black text-white">Interactive Q&A Practice Room</h3>
-              <p className="text-xs text-slate-400">Complete AI questions evaluation checks on live target desired roles.</p>
+              <h3 className="text-base font-black text-slate-900 mt-1">Interactive Q&A Practice Room</h3>
+              <p className="text-xs text-slate-500 mt-0.5 font-medium">Complete AI questions evaluation checks on live target desired roles.</p>
             </div>
 
             <div className="flex items-center gap-2">
-              <span className="text-xs text-slate-400 font-bold font-mono">Topic:</span>
+              <span className="text-xs text-slate-500 font-bold font-mono">Topic:</span>
               <select
                 value={interviewType}
                 onChange={e => setInterviewType(e.target.value as any)}
-                className="bg-slate-950 border border-white/10 rounded-lg px-2.5 py-1 text-xs text-white focus:outline-none focus:border-cyan-400 cursor-pointer"
+                className="bg-white border border-slate-200 rounded-xl px-3 py-1.5 text-xs text-slate-800 focus:outline-none focus:border-indigo-500 cursor-pointer shadow-2xs"
               >
                 <option value="Technical">Technical Stack (Node, React, databases)</option>
                 <option value="Behavioral">Behavioral (STAR method conflicts)</option>
@@ -1477,7 +1516,7 @@ Please find my customized full-stack credentials enclosed for your immediate con
               {!interviewStarted && (
                 <button
                   onClick={triggerStartInterview}
-                  className="px-3.5 py-1.5 bg-cyan-400 text-slate-950 font-black rounded-lg text-xs hover:bg-cyan-300 transition-all cursor-pointer flex items-center gap-1"
+                  className="px-4.5 py-2 bg-indigo-600 text-white font-bold rounded-xl text-xs hover:bg-indigo-700 transition-all cursor-pointer flex items-center gap-1.5 shadow-md shadow-indigo-100"
                 >
                   Start Round
                 </button>
@@ -1491,17 +1530,17 @@ Please find my customized full-stack credentials enclosed for your immediate con
               <div className="lg:col-span-2 space-y-4">
                 
                 {/* Visual Dialogue loop */}
-                <div className="bg-slate-950 rounded-2xl border border-white/5 p-4 h-[320px] overflow-y-auto space-y-4 font-sans text-xs flex flex-col justify-end">
-                  <div className="space-y-3">
+                <div className="bg-slate-50 rounded-2xl border border-slate-200 p-4 h-[320px] overflow-y-auto space-y-4 font-sans text-xs flex flex-col justify-end shadow-inner">
+                  <div className="space-y-3.5">
                     {interviewHistory.map((hist, i) => (
                       <div key={i} className={`flex gap-3 leading-relaxed max-w-[85%] ${hist.role === 'user' ? 'ml-auto flex-row-reverse' : 'mr-auto'}`}>
-                        <div className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 font-bold font-mono border text-[10px] ${
-                          hist.role === 'user' ? 'bg-cyan-500/10 border-cyan-500/20 text-cyan-400' : 'bg-indigo-505/10 border-indigo-500/20 text-indigo-400'
+                        <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 font-extrabold font-mono border text-[10px] ${
+                          hist.role === 'user' ? 'bg-indigo-50 border-indigo-200 text-indigo-700 shadow-2xs' : 'bg-white border-slate-200 text-slate-700 shadow-2xs'
                         }`}>
                           {hist.role === 'user' ? 'YOU' : 'AI'}
                         </div>
-                        <div className={`p-3 rounded-2xl ${
-                          hist.role === 'user' ? 'bg-cyan-500/10 text-cyan-200 border border-cyan-500/10' : 'bg-slate-900 text-slate-300 border border-white/5'
+                        <div className={`p-3 rounded-2xl text-[11.5px] shadow-2xs font-medium ${
+                          hist.role === 'user' ? 'bg-indigo-600 text-white' : 'bg-white text-slate-800 border border-slate-200/80'
                         }`}>
                           {hist.text}
                         </div>
@@ -1517,14 +1556,14 @@ Please find my customized full-stack credentials enclosed for your immediate con
                       type="text"
                       value={candidateResponse}
                       onChange={e => setCandidateResponse(e.target.value)}
-                      placeholder="Type your structured answer (Situation, Task, Action, Result values)..."
-                      className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-cyan-400 font-sans"
+                      placeholder="Type your structured answer (Situation, Task, Action, Result)..."
+                      className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-indigo-500 font-sans shadow-2xs"
                       onKeyDown={e => e.key === 'Enter' && triggerPostResponse()}
                     />
                     <button
                       onClick={triggerPostResponse}
                       disabled={submittingResponse || !candidateResponse}
-                      className="px-4 py-2.5 bg-cyan-400 text-slate-950 font-black text-xs rounded-xl hover:bg-cyan-400/90 transition-all cursor-pointer disabled:opacity-50 shrink-0 inline-flex items-center gap-1"
+                      className="px-5 py-2.5 bg-indigo-600 text-white font-extrabold text-xs rounded-xl hover:bg-indigo-700 transition-all cursor-pointer disabled:opacity-50 shrink-0 inline-flex items-center gap-1.5 shadow-md shadow-indigo-100"
                     >
                       <span>Post Response</span>
                     </button>
@@ -1535,21 +1574,21 @@ Please find my customized full-stack credentials enclosed for your immediate con
 
               {/* Assessment diagnostics scorecard column */}
               <div className="space-y-4">
-                <div className="bg-slate-950/40 border border-white/5 rounded-xl p-4 space-y-4 h-full">
-                  <span className="text-[10px] uppercase font-black text-slate-400 tracking-wider block font-mono">Live Assessment Scorecard</span>
+                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 space-y-4 h-full">
+                  <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider block font-mono">Live Assessment Scorecard</span>
                   
-                  <div className="space-y-3">
+                  <div className="space-y-3.5">
                     {[
-                      { label: 'Technical Accuracy', score: interviewScores.technical, col: 'bg-cyan-400' },
-                      { label: 'Communication Clarity', score: interviewScores.communication, col: 'bg-indigo-400' },
-                      { label: 'Confidence & Demeanor', score: interviewScores.confidence, col: 'bg-purple-400' }
+                      { label: 'Technical Accuracy', score: interviewScores.technical, col: 'bg-indigo-600' },
+                      { label: 'Communication Clarity', score: interviewScores.communication, col: 'bg-emerald-500' },
+                      { label: 'Confidence & Demeanor', score: interviewScores.confidence, col: 'bg-violet-500' }
                     ].map((metric, i) => (
                       <div key={i} className="space-y-1">
-                        <div className="flex justify-between text-[10px] font-bold">
-                          <span className="text-slate-400">{metric.label}</span>
-                          <span className="text-white font-mono">{metric.score}/100</span>
+                        <div className="flex justify-between text-[10.5px] font-bold">
+                          <span className="text-slate-600">{metric.label}</span>
+                          <span className="text-slate-800 font-mono font-extrabold">{metric.score}/100</span>
                         </div>
-                        <div className="w-full h-1.5 bg-white/5 rounded-full overflow-hidden">
+                        <div className="w-full h-1.5 bg-slate-200 rounded-full overflow-hidden">
                           <div className={`h-full ${metric.col}`} style={{ width: `${metric.score}%` }}></div>
                         </div>
                       </div>
@@ -1557,9 +1596,9 @@ Please find my customized full-stack credentials enclosed for your immediate con
                   </div>
 
                   {interviewEvaluation && (
-                    <div className="pt-3 border-t border-white/5 text-[11px] text-slate-300 space-y-1">
-                      <span className="text-[9.5px] uppercase font-bold text-slate-500 font-mono tracking-widest block">AI Feedback Summary</span>
-                      <p className="leading-snug bg-slate-950/60 p-2.5 rounded-lg text-slate-300 font-sans border border-cyan-500/10">{interviewEvaluation}</p>
+                    <div className="pt-3 border-t border-slate-200 text-[11px] text-slate-600 space-y-1.5">
+                      <span className="text-[9.5px] uppercase font-bold text-slate-550 font-mono tracking-widest block">AI Feedback Summary</span>
+                      <p className="leading-relaxed bg-white p-3 rounded-xl text-slate-700 font-sans border border-indigo-100/50 shadow-2xs font-medium text-justify">{interviewEvaluation}</p>
                     </div>
                   )}
                 </div>
@@ -1567,11 +1606,13 @@ Please find my customized full-stack credentials enclosed for your immediate con
 
             </div>
           ) : (
-            <div className="text-center py-20 bg-slate-950/20 border border-dashed border-white/5 rounded-2xl text-slate-500 text-xs flex flex-col justify-center items-center space-y-3.5">
-              <Zap className="w-10 h-10 text-slate-600 animate-bounce" />
+            <div className="text-center py-24 bg-white border border-dashed border-slate-200 rounded-3xl text-slate-400 text-xs flex flex-col justify-center items-center space-y-4 shadow-2xs">
+              <div className="p-4 bg-slate-50 border border-slate-100 rounded-2xl">
+                <Zap className="w-8 h-8 text-indigo-600 animate-pulse" />
+              </div>
               <div>
-                <span className="block font-bold text-slate-400">Interview Practice Coach is Idle</span>
-                <p className="text-[10px] text-slate-500 mt-1 max-w-sm">Select target practice style credentials on the upper panel & click &ldquo;Start Round&rdquo; to begin a live professional review.</p>
+                <span className="block font-bold text-slate-700">Interview Practice Coach is Ready</span>
+                <p className="text-[10.5px] text-slate-500 mt-1 max-w-sm leading-relaxed font-semibold">Select target practice style credentials on the upper panel & click &ldquo;Start Round&rdquo; to begin a live professional review.</p>
               </div>
             </div>
           )}
@@ -1579,10 +1620,10 @@ Please find my customized full-stack credentials enclosed for your immediate con
       )}
 
       {seekerTab === 'tracker' && (
-        <div className="space-y-5 font-sans">
+        <div className="space-y-6 font-sans">
           
           {/* Conversion analytic rates */}
-          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 p-4 rounded-2xl border border-white/5 bg-slate-900/40">
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-5 p-6 rounded-3xl border border-slate-200 bg-white shadow-sm">
             {[
               { label: 'Total active Pipeline', val: `${kanbanCards.length} Cards` },
               { label: 'ATS Screening Pass', val: '82%', sub: 'High Match' },
@@ -1590,42 +1631,45 @@ Please find my customized full-stack credentials enclosed for your immediate con
               { label: 'Offer Conversion Rate', val: '15%', sub: 'Target: 10%' }
             ].map((stat, i) => (
               <div key={i} className="space-y-1 text-center sm:text-left">
-                <span className="text-[9px] uppercase font-bold text-slate-400 tracking-wider block font-mono">{stat.label}</span>
-                <p className="text-xl font-black text-white">{stat.val}</p>
-                {stat.sub && <span className="text-[9px] text-slate-500 font-mono italic leading-none">{stat.sub}</span>}
+                <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider block font-mono">{stat.label}</span>
+                <p className="text-2xl font-extrabold text-slate-900 leading-tight">{stat.val}</p>
+                {stat.sub && <span className="text-[10.5px] text-slate-405 font-mono italic leading-none font-semibold">{stat.sub}</span>}
               </div>
             ))}
           </div>
 
           {/* Kanban drag/drop lists simulator columns */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
             {[
-              { status: 'Applied', color: 'border-orange-500/20 bg-orange-500/[0.01] text-orange-400 bg-orange-505/10' },
-              { status: 'Interview Scheduled', color: 'border-cyan-500/20 bg-cyan-500/[0.01] text-cyan-400 bg-cyan-505/10' },
-              { status: 'Offer Received', color: 'border-emerald-500/20 bg-emerald-500/[0.01] text-emerald-400 bg-emerald-505/10' }
+              { status: 'Applied', color: 'border-amber-200 bg-slate-50 text-amber-800', badgeCls: 'bg-amber-100 text-amber-800' },
+              { status: 'Interview Scheduled', color: 'border-indigo-200 bg-slate-50 text-indigo-800', badgeCls: 'bg-indigo-100 text-indigo-800' },
+              { status: 'Offer Received', color: 'border-emerald-200 bg-slate-50 text-emerald-800', badgeCls: 'bg-emerald-100 text-emerald-800' }
             ].map(col => {
               const cards = kanbanCards.filter(c => c.status === col.status);
               
               return (
-                <div key={col.status} className={`p-4 rounded-xl border ${col.color} space-y-3 h-fit`}>
+                <div key={col.status} className={`p-5 rounded-2xl border ${col.color} space-y-4 h-fit shadow-xs`}>
                   <div className="flex justify-between items-center">
-                    <span className="text-xs font-black uppercase tracking-wider">{col.status} ({cards.length})</span>
+                    <span className="text-xs font-black uppercase tracking-wider text-slate-800 font-sans flex items-center gap-2">
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${col.badgeCls}`}>{cards.length}</span>
+                      {col.status}
+                    </span>
                   </div>
 
-                  <div className="space-y-2">
+                  <div className="space-y-3">
                     {cards.length > 0 ? (
                       cards.map(card => (
-                        <div key={card.id} className="p-3 bg-slate-950 rounded-lg border border-white/5 space-y-2.5">
+                        <div key={card.id} className="p-4 bg-white rounded-xl border border-slate-205 space-y-3 shadow-2xs hover:border-slate-350 transition-all text-slate-850">
                           <div>
-                            <span className="text-xs font-bold text-white block leading-tight">{card.jobTitle}</span>
-                            <span className="text-[10px] text-slate-400 font-mono mt-0.5">{card.company}</span>
+                            <span className="text-xs font-extrabold text-slate-900 block leading-tight">{card.jobTitle}</span>
+                            <span className="text-[10.5px] text-slate-500 font-semibold font-mono block mt-1">{card.company}</span>
                           </div>
 
-                          <div className="flex justify-between items-center text-[9px] text-slate-500 font-mono pt-1.5 border-t border-white/5">
-                            <span>via: {card.source}</span>
+                          <div className="flex justify-between items-center text-[10px] text-slate-400 font-mono pt-2 border-t border-slate-100">
+                            <span className="font-semibold">via: {card.source}</span>
                             <button 
                               onClick={() => handleDeleteKanbanCard(card.id)}
-                              className="text-rose-400 hover:text-rose-300 font-bold ml-1 transition-all cursor-pointer"
+                              className="text-slate-400 hover:text-rose-600 font-bold ml-1 transition-all cursor-pointer font-sans"
                             >
                               Archive
                             </button>
@@ -1633,7 +1677,7 @@ Please find my customized full-stack credentials enclosed for your immediate con
                         </div>
                       ))
                     ) : (
-                      <div className="text-center py-8 text-[10px] text-slate-600 font-mono">Empty Column</div>
+                      <div className="text-center py-10 text-[10.5px] text-slate-400 font-mono italic font-semibold">No jobs in column</div>
                     )}
                   </div>
                 </div>
@@ -1644,50 +1688,52 @@ Please find my customized full-stack credentials enclosed for your immediate con
       )}
 
       {seekerTab === 'coach' && (
-        <div className="border border-white/5 bg-slate-900/10 rounded-2xl p-5 space-y-4">
-          <div>
-            <span className="text-[10px] uppercase font-bold text-cyan-400 tracking-wider font-mono">
+        <div className="border border-slate-200 bg-white rounded-3xl p-6 space-y-6 shadow-sm">
+          <div className="pb-4 border-b border-slate-100">
+            <span className="text-[10px] uppercase font-bold text-indigo-600 tracking-wider font-mono block">
               24/7 INTERACTIVE CAREER COACH
             </span>
-            <h3 className="text-sm font-black text-white">Full-Stack Counseling & Strategy Companion</h3>
-            <p className="text-xs text-slate-400">Ask strategic questions regarding certificate targets, custom resume formats, or wage negotiations.</p>
+            <h3 className="text-base font-black text-slate-900 mt-1">Full-Stack Counseling & Strategy Companion</h3>
+            <p className="text-xs text-slate-500 mt-0.5 font-medium">Ask strategic questions regarding certificate targets, custom resume formats, or wage negotiations.</p>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
             
             {/* Quick tips selectors */}
-            <div className="lg:col-span-1 space-y-3 text-xs leading-tight">
-              <span className="text-[10px] uppercase font-black text-slate-500 font-mono block">Specialist Prompts Templates</span>
-              {[
-                "Prep for dynamic salary negotiations",
-                "Review core skill recommendations",
-                "Create a structured 3-Month learning roadmap",
-                "How do I address a career gap on my resume?"
-              ].map((templateMsg, i) => (
-                <button
-                  key={i}
-                  onClick={() => {
-                    setCoachInput(templateMsg);
-                  }}
-                  className="w-full text-left p-2.5 bg-slate-950/60 rounded-xl border border-white/5 text-slate-300 hover:border-cyan-400/30 hover:text-cyan-400 transition-all cursor-pointer truncate"
-                >
-                  {templateMsg}
-                </button>
-              ))}
+            <div className="lg:col-span-1 space-y-3.5 text-xs leading-tight">
+              <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider block font-mono">Specialist Prompt Presets</span>
+              <div className="space-y-2">
+                {[
+                  "Prep for dynamic salary negotiations",
+                  "Review core skill recommendations",
+                  "Create a structured 3-Month learning roadmap",
+                  "How do I address a career gap on my resume?"
+                ].map((templateMsg, i) => (
+                  <button
+                    key={i}
+                    onClick={() => {
+                      setCoachInput(templateMsg);
+                    }}
+                    className="w-full text-left p-3 bg-slate-50 hover:bg-slate-100/80 rounded-xl border border-slate-200 text-slate-700 hover:text-indigo-600 hover:border-indigo-250 transition-all cursor-pointer truncate font-medium shadow-2xs"
+                  >
+                    {templateMsg}
+                  </button>
+                ))}
+              </div>
             </div>
 
             {/* Chat screen */}
             <div className="lg:col-span-3 space-y-3.5">
-              <div className="p-4 bg-slate-950 rounded-2xl border border-white/5 h-[340px] overflow-y-auto space-y-4 text-xs font-sans">
+              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 h-[340px] overflow-y-auto space-y-4 text-xs font-sans shadow-inner">
                 {coachMessages.map((msg, i) => (
                   <div key={i} className={`flex gap-3 leading-relaxed max-w-[85%] ${msg.role === 'user' ? 'ml-auto flex-row-reverse' : 'mr-auto'}`}>
-                    <div className={`w-5 h-5 rounded flex items-center justify-center font-bold font-mono text-[9px] shrink-0 ${
-                      msg.role === 'user' ? 'bg-cyan-400/10 text-cyan-400 border border-cyan-500/15' : 'bg-indigo-400/10 text-indigo-400 border border-indigo-505/15'
+                    <div className={`w-6 h-6 rounded-lg flex items-center justify-center font-extrabold font-mono text-[10px] shrink-0 border shadow-2xs ${
+                      msg.role === 'user' ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : 'bg-white text-slate-700 border-slate-200'
                     }`}>
-                      {msg.role === 'user' ? 'C' : 'AI'}
+                      {msg.role === 'user' ? 'YOU' : 'AI'}
                     </div>
-                    <div className={`p-3 rounded-2xl ${
-                      msg.role === 'user' ? 'bg-cyan-950/20 border border-cyan-500/10 text-cyan-200' : 'bg-slate-900 border border-white/5 text-slate-300'
+                    <div className={`p-3 rounded-2xl text-[11.5px] font-medium shadow-2xs ${
+                      msg.role === 'user' ? 'bg-indigo-600 text-white' : 'bg-white text-slate-800 border border-slate-200/80'
                     }`}>
                       {msg.content}
                     </div>
@@ -1702,13 +1748,13 @@ Please find my customized full-stack credentials enclosed for your immediate con
                   value={coachInput}
                   onChange={e => setCoachInput(e.target.value)}
                   placeholder="Ask your career query..."
-                  className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-cyan-400"
+                  className="w-full bg-white border border-slate-205 rounded-xl px-4 py-2.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-indigo-500 font-sans shadow-2xs"
                   onKeyDown={e => e.key === 'Enter' && handleSendCoachMsg()}
                 />
                 <button
                   onClick={handleSendCoachMsg}
                   disabled={coachSending || !coachInput.trim()}
-                  className="px-4 py-2.5 bg-cyan-400 text-slate-950 text-xs font-black rounded-xl hover:bg-cyan-300 transition-all cursor-pointer disabled:opacity-50 inline-flex items-center gap-1 shrink-0"
+                  className="px-5 py-2.5 bg-indigo-600 text-white text-xs font-extrabold rounded-xl hover:bg-indigo-700 transition-all cursor-pointer disabled:opacity-50 inline-flex items-center gap-1.5 shrink-0 shadow-md shadow-indigo-100"
                 >
                   <Send className="w-3.5 h-3.5" />
                   <span>Ask Coach</span>
@@ -2195,9 +2241,9 @@ Please find my customized full-stack credentials enclosed for your immediate con
                             onChange={e => setPortalExperience(e.target.value)}
                             className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-400 rounded-xl px-3 py-2 text-xs text-white focus:outline-none transition-colors"
                           >
-                            <option value="1">1-2 Years (Junior Developer)</option>
-                            <option value="3">3-5 Years (Mid-Senior Engineer)</option>
-                            <option value="6">6-8 Years (Lead Tech Practitioner)</option>
+                            <option value="1">1-2 Years (Associate / Junior Specialist)</option>
+                            <option value="3">3-5 Years (Mid-Senior Professional)</option>
+                            <option value="6">6-8 Years (Lead Practitioner / Consultant)</option>
                             <option value="9">9+ Years (Staff / Principal Director)</option>
                           </select>
                         </div>
