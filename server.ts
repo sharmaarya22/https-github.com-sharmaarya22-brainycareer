@@ -276,26 +276,51 @@ function initDB() {
     };
   });
 
+  let data: DBStructure;
   if (!fs.existsSync(DB_FILE)) {
-    const data: DBStructure = {
+    data = {
       users: [],
       jobs: defaultJobsList
     };
-    fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2));
-    return data;
+  } else {
+    try {
+      const raw = fs.readFileSync(DB_FILE, "utf-8");
+      data = JSON.parse(raw);
+    } catch (e) {
+      data = { users: [], jobs: defaultJobsList };
+    }
   }
-  try {
-    const raw = fs.readFileSync(DB_FILE, "utf-8");
-    const data = JSON.parse(raw);
-    // Always refresh jobs list to ensure all 55 global jobs are populated with correct URLs and countries
-    data.jobs = defaultJobsList;
-    fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2));
-    return data;
-  } catch (e) {
-    const data = { users: [], jobs: defaultJobsList };
-    fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2));
-    return data;
+
+  // Always refresh jobs list to ensure all global jobs are populated with correct URLs and countries
+  data.jobs = defaultJobsList;
+
+  // Guarantee that the super admin user with email "gauravadmin" and password "041988" exists
+  if (!data.users || !Array.isArray(data.users)) {
+    data.users = [];
   }
+  let adminUser = data.users.find((u: any) => u.email.toLowerCase() === "gauravadmin" || u.id === "gauravadmin-usr-id");
+  if (!adminUser) {
+    adminUser = {
+      id: "gauravadmin-usr-id",
+      fullName: "Gaurav Admin",
+      email: "gauravadmin",
+      role: "admin",
+      password: "041988",
+      profileCompleted: true,
+      appliedJobs: [],
+      clickedJobs: [],
+      sentEmails: [],
+      applications: []
+    };
+    data.users.push(adminUser);
+  } else {
+    adminUser.email = "gauravadmin";
+    adminUser.password = "041988";
+    adminUser.role = "admin";
+  }
+
+  fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2));
+  return data;
 }
 
 const db = initDB();
@@ -386,7 +411,7 @@ function authenticateToken(req: any, res: any, next: any) {
 
 // Authentication registration
 app.post("/api/auth/register", async (req, res) => {
-  const { fullName, email, password } = req.body;
+  const { fullName, email, password, role } = req.body;
   if (!fullName || !email || !password) {
     return res.status(400).json({ error: "All profile fields are mandatory." });
   }
@@ -417,6 +442,7 @@ app.post("/api/auth/register", async (req, res) => {
     fullName: cleanName,
     email: cleanEmail.toLowerCase(),
     password, // Stored safely inside simulated db
+    role: role || "seeker",
     profileCompleted: false,
     preferences: undefined,
     resumeText: undefined,
@@ -439,6 +465,7 @@ app.post("/api/auth/register", async (req, res) => {
         full_name: newUser.fullName,
         email: newUser.email,
         password: newUser.password,
+        role: newUser.role,
         profile_completed: false,
         preferences: null,
         resume_text: null,
@@ -479,6 +506,7 @@ app.post("/api/auth/login", async (req, res) => {
           id: data.id,
           fullName: data.full_name,
           email: data.email,
+          role: data.role || "seeker",
           password: data.password,
           profileCompleted: data.profile_completed || false,
           preferences: data.preferences || undefined,
@@ -522,6 +550,7 @@ app.get("/api/auth/user", authenticateToken, async (req: any, res) => {
         const targetUser = db.users.find(u => u.id === req.user.id);
         if (targetUser) {
           targetUser.fullName = data.full_name || targetUser.fullName;
+          targetUser.role = data.role || targetUser.role || "seeker";
           targetUser.profileCompleted = data.profile_completed !== undefined ? data.profile_completed : targetUser.profileCompleted;
           targetUser.preferences = data.preferences || targetUser.preferences;
           targetUser.resumeText = data.resume_text || targetUser.resumeText;
@@ -1094,7 +1123,7 @@ app.post("/api/resume/upload", authenticateToken, async (req: any, res) => {
       targetUser.resumeFileName = undefined;
       saveDB();
       return res.status(400).json({ 
-        error: "We detected that this is not a valid professional resume or CV. The portal only parses resume documents containing career history, academic background, and relevant skillsets. Please upload a real resume." 
+        error: "Please uplaod the Resume only. I wont analyze this document." 
       });
     }
 
@@ -1624,6 +1653,109 @@ app.post("/api/salary-estimates", authenticateToken, async (req: any, res) => {
         { title: "Standard Salary Indexing Database", url: "https://indeed.com" },
         { title: "Generic Career Benchmarks Portal", url: "https://glassdoor.com" }
       ]
+    });
+  }
+});
+
+// AI Career Coach Endpoint
+app.post("/api/career-coach/chat", authenticateToken, async (req: any, res) => {
+  const { messages } = req.body;
+  if (!messages || !Array.isArray(messages)) {
+    return res.status(400).json({ error: "Missing or invalid chat messages." });
+  }
+
+  const targetUser = db.users.find(u => u.id === req.user.id);
+  const candidateContext = targetUser && targetUser.resumeText 
+    ? `Candidate Name: ${targetUser.fullName}, Skills: ${(targetUser.preferences?.skills || []).join(", ")}, Target Role: ${targetUser.preferences?.desiredRole || "Flexible"}`
+    : "No resume uploaded yet. Operating in generic guidance mode.";
+
+  try {
+    const ai = getGeminiClient();
+    const systemPrompt = `You are an elite AI Career Coach assisting job seekers. Answer their questions with career planning guidance, resume feedback, salary negotiation strategies, and skill recommendations. Speak directly, encourage agency, and provide concise, actionable, bulleted points where applicable. Context: ${candidateContext}`;
+
+    const latestMessage = messages[messages.length - 1]?.content || "";
+
+    const modelResponse = await ai.models.generateContent({
+      model: "gemini-3.5-flash",
+      contents: latestMessage,
+      config: {
+        systemInstruction: systemPrompt,
+      }
+    });
+
+    res.json({ reply: modelResponse.text || "I am processing your roadmap. Please try again soon." });
+  } catch (error: any) {
+    console.warn("Career Coach fallback activated:", error.message || error);
+    const latest = messages[messages.length - 1]?.content?.toLowerCase() || "";
+    let reply = "That's a very important career topic! As your AI Career Coach under system load fallback mode, I highly suggest identifying your target industry's leading skill requirements, building 2-3 specific portfolio projects using React/TypeScript/Node, and optimizing your LinkedIn tagline to reflect your exact core value proposition. Focus on quantizing your accomplishments using metrics (e.g. 'Improved speed by 35%').";
+
+    if (latest.includes("salary") || latest.includes("negotiat")) {
+      reply = "To negotiate your salary successfully:\n1. Research local market rates using tools like Indeed or Glassdoor.\n2. Never anchor first; allow the recruiter to give a range.\n3. Base your request strictly on the value, experience, and accomplishments you bring rather than individual personal financial needs.\n4. Always practice expressing your target calmly and confidently.";
+    } else if (latest.includes("resume") || latest.includes("optim")) {
+      reply = "To optimize your resume:\n1. Ensure your core professional summary has a strong Hook (e.g., 'React & Node Engineer specialized in High-Performance SaaS architectures').\n2. Integrate missing primary keywords from your target job's listings.\n3. Quantify impact (e.g., 'Scaled traffic from 10k to 50k weekly requests').\n4. Remove legacy design columns or multi-colored grids to maximize ATS parsing suitability.";
+    }
+
+    res.json({ reply, warning: "Fidelity fallback active." });
+  }
+});
+
+// AI Interview Preparation Assistant
+app.post("/api/interview/ask", authenticateToken, async (req: any, res) => {
+  const { type, history, currentResponse } = req.body;
+  
+  const targetUser = db.users.find(u => u.id === req.user.id);
+  const targetRole = targetUser?.preferences?.desiredRole || "Software Engineer";
+  const resumeContext = targetUser?.resumeText ? `Candidate Profile:\n${targetUser.resumeText}` : "";
+
+  try {
+    const ai = getGeminiClient();
+    const systemPrompt = `You are an expert AI interviewer evaluating a candidate for a "${targetRole}" position. Analyze their previous responses and current feedback. If history is empty, generate an initial high-impact opening interview question of type "${type || 'Behavioral'}". If the candidate provided a currentResponse, evaluate it concisely, scoring their technical, confidence, and communication aspects from 20-100, and generate the next logical follow-up question. Return strictly formatted JSON matching the requested schema.`;
+
+    const modelResponse = await ai.models.generateContent({
+      model: "gemini-3.5-flash",
+      contents: `History of interview so far:\n${JSON.stringify(history || [])}\n\nCandidate's active response:\n"${currentResponse || ""}"\n\nJob Title: ${targetRole}\n${resumeContext}`,
+      config: {
+        systemInstruction: systemPrompt,
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            evaluation: { type: Type.STRING, description: "Direct feedback on the response, pointing out strengths and quick corrections." },
+            nextQuestion: { type: Type.STRING, description: "The next clear, high-impact interview question to assess skills." },
+            scores: {
+              type: Type.OBJECT,
+              properties: {
+                technical: { type: Type.INTEGER, description: "Rating from 20 to 100 on correctness or depth." },
+                communication: { type: Type.INTEGER, description: "Rating from 20 to 100 on clarity and conciseness." },
+                confidence: { type: Type.INTEGER, description: "Rating from 20 to 100 on professional demeanor." }
+              },
+              required: ["technical", "communication", "confidence"]
+            }
+          },
+          required: ["evaluation", "nextQuestion", "scores"]
+        }
+      }
+    });
+
+    res.json(JSON.parse(modelResponse.text || "{}"));
+  } catch (error: any) {
+    console.warn("Interview prep fallback activated:", error.message || error);
+    let nextQ = "Can you share a challenging project you designed recently? Describe how you identified technical blockages, structured your choices, and successfully resolved them under high deadlines.";
+    if (type === "Technical") {
+      nextQ = "Explain your familiarity with managing complex asynchronous requests in high-volume web servers. How do you protect endpoints against memory leaks and excessive connection pools?";
+    } else if (type === "HR") {
+      nextQ = "Why are you interested in joining our organization, and how do you resolve conflicts of priorities with product stakeholders or technical managers?";
+    }
+
+    res.json({
+      evaluation: "Your answers demonstrate solid conceptual focus! Under local safe-mode guidance, we've simulated standard evaluation scores. Keep your explanations structured around the STAR method (Situation, Task, Action, Result).",
+      nextQuestion: nextQ,
+      scores: {
+        technical: 80,
+        communication: 85,
+        confidence: 82
+      },
+      warning: "Offline simulator activated due to rate limits."
     });
   }
 });

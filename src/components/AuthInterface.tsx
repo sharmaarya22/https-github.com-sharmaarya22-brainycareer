@@ -11,6 +11,7 @@ export default function AuthInterface({ onAuthSuccess }: AuthInterfaceProps) {
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [selectedRole, setSelectedRole] = useState<'seeker' | 'employer' | 'admin'>('seeker');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -20,7 +21,7 @@ export default function AuthInterface({ onAuthSuccess }: AuthInterfaceProps) {
     setLoading(true);
 
     const endpoint = isLogin ? '/api/auth/login' : '/api/auth/register';
-    const payload = isLogin ? { email, password } : { fullName, email, password };
+    const payload = isLogin ? { email, password } : { fullName, email, password, role: selectedRole };
 
     try {
       const response = await fetch(endpoint, {
@@ -97,23 +98,51 @@ export default function AuthInterface({ onAuthSuccess }: AuthInterfaceProps) {
 
           <form onSubmit={handleSubmit} className="space-y-5">
             {!isLogin && (
-              <div>
-                <label className="block text-xs uppercase tracking-wider font-semibold text-slate-400 mb-1.5">
-                  Full Name
-                </label>
-                <div className="relative rounded-md shadow-sm">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <User className="h-5 h-5 text-slate-400" />
+              <div className="space-y-5">
+                <div>
+                  <label className="block text-xs uppercase tracking-wider font-semibold text-slate-400 mb-2 font-mono">
+                    Select Account Type
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {[
+                      { id: 'seeker', label: 'Job Seeker', desc: 'Find Top Fit Jobs' },
+                      { id: 'employer', label: 'Employer', desc: 'Post Vacancies' }
+                    ].map((roleOpt) => (
+                      <button
+                        key={roleOpt.id}
+                        type="button"
+                        onClick={() => setSelectedRole(roleOpt.id as any)}
+                        className={`p-3 rounded-2xl border text-center transition-all cursor-pointer ${
+                          selectedRole === roleOpt.id
+                            ? 'border-cyan-400 bg-cyan-400/10 text-cyan-300 font-extrabold shadow-md shadow-cyan-500/5'
+                            : 'border-white/5 bg-slate-950/20 text-slate-400 hover:border-white/10 hover:text-slate-300'
+                        }`}
+                      >
+                        <div className="text-[11px] font-black tracking-tight">{roleOpt.label}</div>
+                        <div className="text-[8px] text-slate-500 mt-0.5 leading-tight font-sans text-center">{roleOpt.desc}</div>
+                      </button>
+                    ))}
                   </div>
-                  <input
-                    id="reg-fullname-field"
-                    type="text"
-                    required
-                    value={fullName}
-                    onChange={(e) => setFullName(e.target.value)}
-                    className="block w-full pl-10 pr-3 py-2.5 bg-slate-950/40 border border-white/10 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 text-sm transition-all placeholder:text-slate-500"
-                    placeholder="Alex Mercer"
-                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs uppercase tracking-wider font-semibold text-slate-400 mb-1.5">
+                    Full Name
+                  </label>
+                  <div className="relative rounded-md shadow-sm">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <User className="h-5 h-5 text-slate-400" />
+                    </div>
+                    <input
+                      id="reg-fullname-field"
+                      type="text"
+                      required
+                      value={fullName}
+                      onChange={(e) => setFullName(e.target.value)}
+                      className="block w-full pl-10 pr-3 py-2.5 bg-slate-950/40 border border-white/10 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 text-sm transition-all placeholder:text-slate-500"
+                      placeholder="Alex Mercer"
+                    />
+                  </div>
                 </div>
               </div>
             )}

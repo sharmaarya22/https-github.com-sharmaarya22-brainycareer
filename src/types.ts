@@ -32,6 +32,7 @@ export interface User {
   resumeText?: string;
   resumeFileName?: string;
   analysis?: ResumeAnalysis;
+  role?: 'seeker' | 'employer' | 'admin';
 }
 
 export interface Job {
