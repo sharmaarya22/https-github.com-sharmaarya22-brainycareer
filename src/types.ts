@@ -51,6 +51,7 @@ export interface Job {
   originalUrl: string; // Specific job posting page url
   country?: string;
   source?: string;
+  status?: 'Open' | 'Closed';
 }
 
 export interface MatchResult {

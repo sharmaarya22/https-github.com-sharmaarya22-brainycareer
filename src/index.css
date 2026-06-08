@@ -1,1 +1,12 @@
 @import "tailwindcss";
+
+@keyframes slideIn {
+  from {
+    transform: translateY(1rem) scale(0.95);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}

@@ -3,7 +3,8 @@ import {
   Briefcase, Search, MapPin, Building, Calendar, DollarSign, 
   Sparkles, AlertCircle, FileText, CheckCircle2, ChevronRight, 
   Clipboard, Check, Edit3, TrendingUp, Cpu, Info, SlidersHorizontal, Settings,
-  Globe, RefreshCw, ExternalLink, Mail, X, Send, Bot, CheckSquare, Plus, Trash2, Award, Zap
+  Globe, RefreshCw, ExternalLink, Mail, X, Send, Bot, CheckSquare, Plus, Trash2, Award, Zap,
+  Users, Eye
 } from 'lucide-react';
 import { User, Job, MatchResult } from '../types';
 import SkillRadarChart from './SkillRadarChart';
@@ -24,20 +25,6 @@ CORE EXPERTISE:
 * SQL (PostgreSQL), Databases, REST, GraphQL
 * Tailwind CSS, UI/UX Design Systems, Responsive Interfaces
 * Docker, CI/CD, AWS Cloud Infrastructure, Automation`
-  },
-  scrumMaster: {
-    fileName: "gaurav_upreti_senior_scrum_master.txt",
-    fullName: "Gaurav Upreti",
-    text: `GAURAV UPRETI - SENIOR SCRUM MASTER, PRODUCT OWNER & BA
-Email: upretigaurav22@gmail.com -- Location: Remote / Worldwide
-SUMMARY:
-Accredited Agile Practitioner, Senior Scrum Master, and Business Systems Analyst with over 8 years of team facilitation experience. Master of backlog orchestration, Agile sprints, Jira roadmap designs, and user requirement drafting. Professional developer of PowerBI business dashboards and database metrics tracking frameworks.
-
-CORE EXPERTISE:
-* Product Management, Scrum Master, Agile Methodologies, Sprint Control
-* Requirements Elicitation, User Stories, Backlog Prioritization, Engineering Specs
-* PowerBI, SQL Queries, Data Modeling, KPIs Metrics
-* JIRA, Confluence, Kanban boards, Cross-Functional Team Leadership`
   }
 };
 
@@ -73,10 +60,10 @@ export default function JobSeekerPortal({
   uploadingResume
 }: JobSeekerPortalProps) {
   
-  const [seekerTab, setSeekerTab] = useState<'jobs' | 'match' | 'resume' | 'letters' | 'interview' | 'tracker' | 'coach'>('match');
+  const [seekerTab, setSeekerTab] = useState<'jobs' | 'match' | 'resume' | 'letters' | 'interview' | 'tracker' | 'coach' | 'visitors'>('match');
   const [simulatingStep, setSimulatingStep] = useState<string | null>(null);
 
-  const handleLoadDemoProfile = async (type: 'developer' | 'scrumMaster') => {
+  const handleLoadDemoProfile = async (type: 'developer') => {
     setSimulatingStep("📥 Received resume credentials...");
     
     const steps = [
@@ -170,6 +157,36 @@ export default function JobSeekerPortal({
   const [portalCoverLetterText, setPortalCoverLetterText] = useState('');
   const [portalSuccess, setPortalSuccess] = useState(false);
   const [submittingPortalMsg, setSubmittingPortalMsg] = useState(false);
+
+  // Profile View Log state & poll trigger
+  const [profileViews, setProfileViews] = useState<any[]>([]);
+  const [loadingViews, setLoadingViews] = useState(false);
+
+  const fetchProfileViews = async () => {
+    if (!token) return;
+    try {
+      const res = await fetch('/api/notifications', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const list = data.notifications || [];
+        // Filter those of type "profile_view" representing recruiter click activity
+        const views = list.filter((n: any) => n.type === 'profile_view');
+        setProfileViews(views);
+      }
+    } catch (e) {
+      console.warn("Could not load profile views log history:", e);
+    }
+  };
+
+  useEffect(() => {
+    if (token) {
+      fetchProfileViews();
+      const interval = setInterval(fetchProfileViews, 5000);
+      return () => clearInterval(interval);
+    }
+  }, [token]);
 
   // Auto set first selected job
   useEffect(() => {
@@ -584,26 +601,31 @@ Please find my customized full-stack credentials enclosed for your immediate con
     <div id="job-seeker-view-frame" className="space-y-6 font-sans">
       
       {/* Sub menu tabs inside Seeker Console */}
-      <div className="flex border-b border-white/5 pb-2 overflow-x-auto gap-4 scrollbar-none">
+      <div className="flex border-b border-slate-205 pb-2 overflow-x-auto gap-4 scrollbar-none">
         {[
-          { id: 'match', label: 'Job Compatibility Matches' },
-          { id: 'jobs', label: 'AI Matchmaking & Jobs' },
+          { id: 'match', label: 'AI Matchmaking & Jobs' },
           { id: 'resume', label: 'Resume Intelligence & Builder' },
           { id: 'letters', label: 'AI Cover Letter Studio' },
           { id: 'interview', label: 'Interactive Interview Coach' },
           { id: 'tracker', label: 'Application Pipeline & Kanban' },
-          { id: 'coach', label: '24/7 AI Career Coach' }
+          { id: 'coach', label: '24/7 AI Career Coach' },
+          { id: 'visitors', label: 'Who Viewed My Profile' }
         ].map(tab => (
           <button
             key={tab.id}
             onClick={() => setSeekerTab(tab.id as any)}
-            className={`text-xs font-bold py-2 whitespace-nowrap cursor-pointer transition-all border-b-2 ${
+            className={`text-sm font-bold py-2 whitespace-nowrap cursor-pointer transition-all border-b-2 inline-flex items-center gap-1.5 ${
               seekerTab === tab.id 
-                ? 'border-cyan-400 text-cyan-400 font-extrabold' 
-                : 'border-transparent text-slate-400 hover:text-white'
+                ? 'border-indigo-600 text-indigo-700 font-extrabold' 
+                : 'border-transparent text-slate-500 hover:text-slate-800'
             }`}
           >
-            {tab.label}
+            <span>{tab.label}</span>
+            {tab.id === 'visitors' && profileViews.length > 0 && (
+              <span className="px-1.5 py-0.5 text-[9px] font-black bg-indigo-100 text-indigo-700 rounded-full animate-pulse">
+                {profileViews.length}
+              </span>
+            )}
           </button>
         ))}
       </div>
@@ -613,135 +635,123 @@ Please find my customized full-stack credentials enclosed for your immediate con
           
           {/* SIMULATION STATE LOGGER */}
           {simulatingStep && (
-            <div className="p-4 bg-cyan-950/15 border border-cyan-500/20 rounded-2xl flex items-center justify-between text-xs text-cyan-300 font-mono">
+            <div className="p-4 bg-indigo-55 border border-indigo-150 rounded-2xl flex items-center justify-between text-xs text-indigo-800 font-mono">
               <div className="flex items-center gap-2.5">
-                <RefreshCw className="w-4 h-4 animate-spin text-cyan-400" />
+                <RefreshCw className="w-4 h-4 animate-spin text-indigo-600" />
                 <span>{simulatingStep}</span>
               </div>
-              <div className="h-1.5 w-24 bg-slate-800 rounded-full overflow-hidden">
-                <div className="h-full bg-cyan-400 animate-[pulse_1.5s_infinite] w-3/4"></div>
+              <div className="h-1.5 w-24 bg-slate-205 rounded-full overflow-hidden">
+                <div className="h-full bg-indigo-600 animate-[pulse_1.5s_infinite] w-3/4"></div>
               </div>
             </div>
           )}
 
           {/* SYSTEM DISPATCHER: PROFILE UNANALYZED HERO vs ANALYZED COUNTERPARTS */}
           {!user.resumeText ? (
-            <div className="bg-gradient-to-r from-cyan-950/15 via-indigo-950/15 to-slate-950/40 border border-cyan-500/15 p-6 rounded-2xl relative overflow-hidden space-y-5 font-sans">
-              <span className="absolute -right-12 -top-12 w-32 h-32 bg-cyan-500/5 rounded-full blur-2xl"></span>
+            <div className="bg-white border border-slate-200 p-8 rounded-3xl relative overflow-hidden space-y-6 font-sans shadow-sm">
+              <div className="absolute -right-12 -top-12 w-32 h-32 bg-indigo-100/40 rounded-full blur-2xl"></div>
               
-              <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-5">
-                <div className="space-y-1.5">
+              <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-6">
+                <div className="space-y-2">
                   <div className="flex items-center gap-2">
-                    <Sparkles className="w-4 h-4 text-cyan-400 animate-pulse" />
-                    <span className="text-[10px] uppercase font-black tracking-wider text-cyan-400 font-mono">Autonomous Global Job Matchmaker</span>
+                    <Sparkles className="w-5 h-5 text-indigo-600 animate-pulse" />
+                    <span className="text-xs uppercase font-extrabold tracking-wider text-indigo-600 font-mono">Autonomous Global Job Matchmaker</span>
                   </div>
-                  <h3 className="text-base font-bold text-white">Your Automated Worldwide Career Matchmaker is Ready</h3>
-                  <p className="text-xs text-slate-400 max-w-3xl leading-relaxed">
-                    Aura AI automatically indexes corporate portals worldwide (Silicon Valley, London, New York, Remote) to evaluate skill overlaps, compute ATS alignments, and gauge interview success likelihoods. Populate your credentials or select an elite preset to fire our live Gemini parser.
+                  <h3 className="text-xl font-bold text-slate-900">Your Automated Worldwide Career Matchmaker is Ready</h3>
+                  <p className="text-sm text-slate-650 max-w-4xl leading-relaxed font-semibold">
+                    NexGen AI automatically indexes corporate vacancy portals worldwide to evaluate skill overlaps, compute ATS alignments, and gauge interview success likelihoods. Populate your credentials or select our elite software developer preset to analyze your profile.
                   </p>
                 </div>
 
-                <div className="flex flex-col sm:flex-row gap-3.5 shrink-0">
+                <div className="flex flex-col sm:flex-row gap-3.5 shrink-0 font-sans">
                   <button
                     onClick={() => handleLoadDemoProfile('developer')}
                     disabled={uploadingResume}
-                    className="p-3 text-left w-full sm:w-[250px] bg-slate-950 hover:border-cyan-400/30 border border-white/5 rounded-xl transition-all font-sans cursor-pointer group"
+                    className="p-4 text-left w-full sm:w-[280px] bg-indigo-50/50 hover:bg-indigo-50 border border-indigo-100 rounded-2xl transition-all font-sans cursor-pointer group shadow-sm"
                   >
                     <div className="flex items-center justify-between gap-1">
-                      <span className="text-xs font-black text-white block group-hover:text-cyan-400 transition-colors">Alex Mercer CV Preset</span>
-                      <ChevronRight className="w-3.5 h-3.5 text-slate-500 group-hover:text-cyan-400 transition-colors" />
+                      <span className="text-sm font-bold text-indigo-900 block group-hover:text-indigo-75 transition-colors">Alex Mercer CV Preset</span>
+                      <ChevronRight className="w-4 h-4 text-indigo-500 group-hover:text-indigo-700 transition-colors" />
                     </div>
-                    <span className="text-[10px] text-slate-400 block mt-1 font-mono">Software Lead (React, Node, Cloud, TS)</span>
-                  </button>
-
-                  <button
-                    onClick={() => handleLoadDemoProfile('scrumMaster')}
-                    disabled={uploadingResume}
-                    className="p-3 text-left w-full sm:w-[250px] bg-slate-950 hover:border-indigo-400/30 border border-white/5 rounded-xl transition-all font-sans cursor-pointer group"
-                  >
-                    <div className="flex items-center justify-between gap-1">
-                      <span className="text-xs font-black text-white block group-hover:text-indigo-450 transition-colors">Gaurav Upreti CV Preset</span>
-                      <ChevronRight className="w-3.5 h-3.5 text-slate-500 group-hover:text-indigo-450 transition-colors" />
-                    </div>
-                    <span className="text-[10px] text-slate-400 block mt-1 font-mono">Agile Scrum Manager (Sprints, KPIs, PM)</span>
+                    <span className="text-xs text-indigo-650 block mt-1.5 font-mono font-medium">Software Lead (React, Node, Cloud, TS)</span>
                   </button>
                 </div>
               </div>
 
-              <div className="border-t border-white/5 pt-4">
-                <span className="text-[9.5px] uppercase font-bold text-slate-400 block mb-2 tracking-wider font-mono">Or Upload / Drop Your Professional Credentials Manual File:</span>
-                <div className="p-4 bg-slate-950/60 rounded-xl border border-white/5">
+              <div className="border-t border-slate-100 pt-6">
+                <span className="text-xs uppercase font-bold text-slate-500 block mb-3 tracking-wider font-mono">Or Upload Your Professional Credentials Manual File:</span>
+                <div className="p-5 bg-slate-50 rounded-2xl border border-slate-200">
                   <ResumeUploader onUploadSuccess={onUploadResume} isLoading={uploadingResume} currentFileName={user.resumeFileName} />
                 </div>
               </div>
             </div>
           ) : (
-            <div className="space-y-5">
+            <div className="space-y-6">
               
               {/* STUNNING GLOBAL PROFILE & ANALYTICS BENTO HUB */}
-              <div className="bg-[#0b101f]/90 border border-white/5 p-5 rounded-2xl space-y-4 font-sans">
+              <div className="bg-white border border-slate-205 p-6 md:p-8 rounded-3xl space-y-5 font-sans shadow-sm">
                 <div className="flex justify-between items-start">
                   <div>
                     <div className="flex items-center gap-1.5">
-                      <Globe className="w-4 h-4 text-cyan-400" />
-                      <span className="text-[10px] uppercase tracking-widest font-black text-cyan-400 font-mono">AUTONOMOUS GLOBAL PORTAL INDEXING STATUS</span>
+                      <Globe className="w-5 h-5 text-indigo-600" />
+                      <span className="text-xs uppercase tracking-widest font-black text-indigo-600 font-mono">AUTONOMOUS GLOBAL PORTAL INDEXING STATUS</span>
                     </div>
-                    <h3 className="text-sm font-black text-white mt-0.5">Automated Global Profile Matchmaker Diagnostics</h3>
+                    <h3 className="text-base md:text-lg font-bold text-slate-900 mt-1">Automated Global Profile Matchmaker Diagnostics</h3>
                   </div>
                   <button 
                     onClick={() => onUploadResume({ text: "" }, "")}
-                    className="text-[10px] text-slate-500 hover:text-rose-400 font-bold font-mono transition-all underline cursor-pointer"
+                    className="text-xs text-rose-600 font-bold hover:text-rose-800 transition-all underline cursor-pointer"
                   >
                     Clear Credentials Reset
                   </button>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-5 text-xs">
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 text-sm">
                   {/* General scoring block */}
-                  <div className="p-4 bg-slate-950/55 border border-white/5 rounded-xl space-y-3">
-                    <span className="text-[9px] font-mono uppercase font-black text-slate-500 tracking-wider block">Candidate Match Compatibility Index</span>
+                  <div className="p-5 bg-slate-50 border border-slate-200 rounded-2xl space-y-4">
+                    <span className="text-xs font-mono uppercase font-black text-slate-500 tracking-wider block">Candidate Match Compatibility Index</span>
                     <div className="flex items-center gap-3">
-                      <div className="text-3xl font-black text-cyan-400 font-mono tracking-tight">{user.analysis?.score || 85}%</div>
-                      <div className="bg-cyan-500/10 border border-cyan-500/20 rounded p-1 px-1.5 text-[9px] text-cyan-300 font-black font-mono">
+                      <div className="text-4xl font-extrabold text-indigo-700 font-mono tracking-tight">{user.analysis?.score || 85}%</div>
+                      <div className="bg-indigo-100 border border-indigo-200 rounded-lg p-1.5 px-2.5 text-xs text-indigo-805 font-bold font-mono">
                         {(user.analysis?.score || 85) >= 90 ? 'A+ ELITE COMPLIANT' : 'B+ HIGH FIT'}
                       </div>
                     </div>
-                    <div className="space-y-1">
-                      <span className="text-[9px] text-slate-400 block uppercase font-mono">Top Career Archetypes suitability:</span>
+                    <div className="space-y-1.5">
+                      <span className="text-xs text-slate-550 block uppercase font-mono font-bold">Top Career Archetypes suitability:</span>
                       <div className="flex flex-wrap gap-1 mt-0.5">
-                        {(user.analysis?.recommendedRoles || []).map((role, rIdx) => (
-                          <span key={role} className="bg-white/5 text-[9px] text-slate-300 p-1 px-1.5 rounded-md font-sans font-medium shrink-0 border border-white/5">
+                        {(user.analysis?.recommendedRoles || ["Fullstack Engineer", "Frontend Architect"]).map((role) => (
+                          <span key={role} className="bg-white text-slate-700 p-1 px-2.5 rounded-lg text-xs font-bold shrink-0 border border-slate-200">
                             {role}
                           </span>
                         ))}
                       </div>
                     </div>
-                    <p className="text-[10.5px] text-slate-300 leading-relaxed font-sans italic mt-1 bg-slate-950 p-2 rounded-lg border border-white/5">
+                    <p className="text-xs text-slate-600 leading-relaxed font-sans italic mt-2 bg-white p-3 rounded-xl border border-slate-200">
                       &ldquo;{user.analysis?.executiveSummary || 'Profile successfully parsed for target global corporate channels.'}&rdquo;
                     </p>
                   </div>
 
                   {/* Dynamic extracted skills Overlay with green strengths and amber gaps */}
-                  <div className="p-4 bg-slate-950/55 border border-white/5 rounded-xl space-y-3.5">
-                    <span className="text-[9px] font-mono uppercase font-black text-slate-500 tracking-wider block">Extracted Skill Attributes & Deficiencies</span>
-                    <div className="space-y-3.5">
+                  <div className="p-5 bg-slate-50 border border-slate-200 rounded-2xl space-y-4">
+                    <span className="text-xs font-mono uppercase font-black text-slate-505 tracking-wider block">Extracted Skill Attributes & Deficiencies</span>
+                    <div className="space-y-4">
                       <div>
-                        <span className="text-[9px] uppercase font-black text-emerald-400 block tracking-wide">✅ Profile Strengths identified ({user.analysis?.keyStrengths?.length || 0}):</span>
-                        <div className="flex flex-wrap gap-1 mt-1.5">
-                          {(user.analysis?.keyStrengths || []).map((strength, sIdx) => (
-                            <span key={strength} className="bg-emerald-500/10 text-emerald-300 text-[9px] p-1 px-1.5 rounded-md font-medium inline-flex items-center gap-0.5 border border-emerald-500/15">
-                              <Check className="w-2.5 h-2.5" />
+                        <span className="text-xs uppercase font-extrabold text-emerald-700 block tracking-wide">✅ Profile Strengths identified ({user.analysis?.keyStrengths?.length || 0}):</span>
+                        <div className="flex flex-wrap gap-1.5 mt-2">
+                          {(user.analysis?.keyStrengths || ["React", "TypeScript", "Tailwind"]).map((strength) => (
+                            <span key={strength} className="bg-emerald-50 text-emerald-805 text-xs p-1 px-2.5 rounded-lg font-bold inline-flex items-center gap-1 border border-emerald-100">
+                              <Check className="w-3.5 h-3.5" />
                               {strength}
                             </span>
                           ))}
                         </div>
                       </div>
                       <div>
-                        <span className="text-[9px] uppercase font-black text-amber-400 block tracking-wide">⚠️ Identified Tech Skill Gaps ({user.analysis?.skillGaps?.length || 0}):</span>
-                        <div className="flex flex-wrap gap-1 mt-1.5">
-                          {(user.analysis?.skillGaps || []).map((gap, gIdx) => (
-                            <span key={gap} className="bg-amber-500/10 text-amber-300 text-[9px] p-1 px-1.5 rounded-md font-medium inline-flex items-center gap-0.5 border border-amber-500/15">
-                              <AlertCircle className="w-2.5 h-2.5" />
+                        <span className="text-xs uppercase font-extrabold text-amber-705 block tracking-wide">⚠️ Identified Tech Skill Gaps ({user.analysis?.skillGaps?.length || 0}):</span>
+                        <div className="flex flex-wrap gap-1.5 mt-2">
+                          {(user.analysis?.skillGaps || ["Kubernetes", "GraphQL"]).map((gap) => (
+                            <span key={gap} className="bg-amber-50 text-amber-805 text-xs p-1 px-2.5 rounded-lg font-bold inline-flex items-center gap-1 border border-amber-100">
+                              <AlertCircle className="w-3.5 h-3.5" />
                               {gap}
                             </span>
                           ))}
@@ -751,22 +761,22 @@ Please find my customized full-stack credentials enclosed for your immediate con
                   </div>
 
                   {/* Next Step Timelines and Career Path Actions */}
-                  <div className="p-4 bg-slate-950/55 border border-white/5 rounded-xl space-y-3.5">
-                    <span className="text-[9px] font-mono uppercase font-black text-slate-500 tracking-wider block">Strategic 3-Year Career Progression Path</span>
-                    <div className="space-y-3">
-                      <div className="space-y-1 text-slate-300 bg-slate-950 p-2.5 rounded-lg border border-white/5 text-[10.5px]">
-                        <span className="text-[8.5px] font-mono uppercase tracking-wider text-slate-400 block">Current Stage diagnostic:</span>
-                        <p className="font-extrabold text-white">{user.analysis?.careerPath?.currentState || 'Diagnostic step determined.'}</p>
-                        <p className="text-[9px] text-cyan-400 font-bold mt-1">Transitions target: {(user.analysis?.careerPath?.transitionRoles || []).join(', ')}</p>
+                  <div className="p-5 bg-slate-50 border border-slate-200 rounded-2xl space-y-4">
+                    <span className="text-xs font-mono uppercase font-black text-slate-505 tracking-wider block">Strategic 3-Year Career Progression Path</span>
+                    <div className="space-y-3.5">
+                      <div className="space-y-1 text-slate-705 bg-white p-3 rounded-xl border border-slate-200 text-xs font-semibold">
+                        <span className="text-[10px] font-mono uppercase tracking-wider text-slate-500 block font-bold">Current Stage diagnostic:</span>
+                        <p className="font-extrabold text-slate-905">{user.analysis?.careerPath?.currentState || 'Diagnostic step determined.'}</p>
+                        <p className="text-xs text-indigo-600 font-bold mt-1.5">Transitions target: {(user.analysis?.careerPath?.transitionRoles || []).join(', ')}</p>
                       </div>
                       
-                      <div className="space-y-1 bg-slate-950/30 p-2 rounded text-[10px]">
-                        <span className="text-[8.5px] font-mono uppercase text-slate-500 block tracking-wide">3-Year Action Plan Timelines:</span>
-                        <div className="space-y-1 mt-1 font-mono text-slate-300">
+                      <div className="space-y-1 bg-white p-3 rounded-xl text-xs border border-slate-200 font-medium">
+                        <span className="text-[10px] font-mono uppercase text-slate-505 block tracking-wider font-bold">3-Year Action Plan Timelines:</span>
+                        <div className="space-y-1 mt-1.5 font-mono text-slate-700">
                           {(user.analysis?.careerPath?.strategicPlan || []).slice(0, 3).map((plan, pIdx) => (
-                            <div key={pIdx} className="flex gap-1.5 leading-snug">
-                              <span className="text-cyan-400 font-black shrink-0">Y{pIdx+1}:</span>
-                              <span className="text-slate-300 truncate">{plan}</span>
+                            <div key={pIdx} className="flex gap-2 leading-relaxed">
+                              <span className="text-indigo-600 font-bold shrink-0">Y{pIdx+1}:</span>
+                              <span className="text-slate-700 truncate font-semibold">{plan}</span>
                             </div>
                           ))}
                         </div>
@@ -775,10 +785,10 @@ Please find my customized full-stack credentials enclosed for your immediate con
                   </div>
                 </div>
 
-                <div className="bg-indigo-950/25 border border-indigo-500/15 p-3.5 rounded-xl text-[10.5px] text-slate-300 flex items-center gap-2.5">
-                  <Bot className="w-4 h-4 text-indigo-400 shrink-0 animate-pulse" />
+                <div className="bg-indigo-50 border border-indigo-150 p-4.5 rounded-2xl text-xs text-indigo-900 flex items-center gap-2.5 font-semibold">
+                  <Bot className="w-5 h-5 text-indigo-600 shrink-0 animate-pulse" />
                   <p className="leading-relaxed">
-                    <strong>Actionable suggested CV additions checklist:</strong> {(user.analysis?.suggestedImprovements || []).join(" | ")}
+                    <strong>Actionable suggested CV additions checklist:</strong> {(user.analysis?.suggestedImprovements || ["Quantifying microfrontend metrics", "Detailing docker cluster deployments"]).join(" | ")}
                   </p>
                 </div>
               </div>
@@ -889,264 +899,286 @@ Please find my customized full-stack credentials enclosed for your immediate con
                 );
               })()}
 
-            </div>
-          )}
-
-          {/* Core job list section and detail window */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Core job list section with INLINE card expansion */}
+          <div className="space-y-5">
             
-            {/* Vacancies listings column */}
-            <div className="lg:col-span-1 space-y-4">
-              <div className="flex items-center gap-2 bg-slate-950/60 p-2 rounded-xl border border-white/5">
-                <Search className="w-4 h-4 text-slate-500 shrink-0 ml-1.5" />
+            {/* Search and location model filter controls */}
+            <div className="flex flex-col md:flex-row gap-4 items-stretch md:items-center bg-white p-4 rounded-2xl border border-slate-200">
+              <div className="flex items-center gap-2 bg-slate-50 p-2.5 px-4 rounded-xl border border-slate-200 flex-1">
+                <Search className="w-5 h-5 text-slate-400 shrink-0" />
                 <input
                   type="text"
-                  placeholder="Search job title, skills, tags..."
+                  placeholder="Search job titles, skills, technologies, tags..."
                   value={searchTerm}
                   onChange={e => setSearchTerm(e.target.value)}
-                  className="w-full bg-transparent text-xs text-white focus:outline-none placeholder-slate-500"
+                  className="w-full bg-transparent text-sm text-slate-800 focus:outline-none placeholder-slate-400 font-medium"
                 />
               </div>
 
-              <div className="flex gap-2">
+              <div className="flex gap-2 shrink-0">
                 {['All', 'Remote', 'Hybrid', 'Onsite'].map(mode => (
                   <button
                     key={mode}
                     onClick={() => setLocModel(mode as any)}
-                    className={`px-3 py-1 bg-slate-900/40 border border-white/5 rounded-lg text-[10.5px] cursor-pointer hover:border-white/10 transition-all ${
-                      locModel === mode ? 'border-cyan-400 bg-cyan-950/20 text-cyan-400 font-bold' : 'text-slate-400'
+                    className={`px-4 py-2 rounded-xl text-xs font-bold cursor-pointer transition-all border ${
+                      locModel === mode 
+                        ? 'border-indigo-600 bg-indigo-50 text-indigo-700' 
+                        : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
                     }`}
                   >
                     {mode}
                   </button>
                 ))}
               </div>
+            </div>
 
-              <div className="space-y-3 max-h-[520px] overflow-y-auto pr-1">
-                {filteredJobs.length > 0 ? (
-                  filteredJobs.map(job => {
-                    const isSelected = selectedJob?.id === job.id;
-                    const match = matches.find(m => m.jobId === job.id);
-                    const score = match ? match.score : 0;
-                    
-                    return (
+            {/* Vertically stacked Job cards directory */}
+            <div className="space-y-4">
+              {filteredJobs.length > 0 ? (
+                filteredJobs.map(job => {
+                  const isSelected = selectedJob?.id === job.id;
+                  const match = matches.find(m => m.jobId === job.id);
+                  const score = match ? match.score : 0;
+                  
+                  return (
+                    <div
+                      key={job.id}
+                      className={`rounded-2xl border bg-white transition-all duration-300 overflow-hidden ${
+                        isSelected 
+                          ? 'border-indigo-505 ring-4 ring-indigo-100 shadow-md' 
+                          : 'border-slate-200 hover:border-slate-300 hover:shadow-sm'
+                      }`}
+                    >
+                      {/* Job Header (Trigger) */}
                       <div
-                        key={job.id}
-                        onClick={() => handleSelectActiveJob(job)}
-                        className={`p-3.5 rounded-xl border cursor-pointer transition-all duration-200 ${
-                          isSelected 
-                            ? 'border-cyan-400 bg-cyan-950/15' 
-                            : 'border-white/5 bg-slate-950/40 hover:border-white/10'
-                        }`}
+                        onClick={() => {
+                          if (isSelected) {
+                            setSelectedJob(null);
+                          } else {
+                            handleSelectActiveJob(job);
+                          }
+                        }}
+                        className="p-5 md:p-6 cursor-pointer select-none flex flex-col md:flex-row justify-between items-start md:items-center gap-4 hover:bg-slate-50/50 transition-colors"
                       >
-                        <div className="flex justify-between items-start gap-1">
-                          <div>
-                            <h4 className="text-xs font-extrabold text-white leading-tight">{job.title}</h4>
-                            <p className="text-[10px] text-slate-400 mt-1">{job.company} • {job.location}</p>
+                        <div className="space-y-1 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h4 className="text-base md:text-lg font-bold text-slate-900 leading-tight">
+                              {job.title}
+                            </h4>
+                            <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-md font-mono ${
+                              job.locationModel === 'Remote' ? 'bg-emerald-50 text-emerald-700 border border-emerald-150' : 'bg-blue-50 text-blue-700 border border-blue-150'
+                            }`}>
+                              {job.locationModel}
+                            </span>
                           </div>
-                          {score > 0 && (
-                            <div className="p-1 px-1.5 rounded bg-cyan-500/10 text-cyan-400 text-[10px] font-mono font-bold border border-cyan-500/15 text-center shrink-0">
-                              {score}%
-                            </div>
-                          )}
+                          
+                          <p className="text-sm text-slate-500 font-medium flex items-center gap-1.5 flex-wrap">
+                            <span className="font-semibold text-slate-700">{job.company}</span>
+                            <span>•</span>
+                            <span>{job.location}</span>
+                            <span>•</span>
+                            <span className="text-emerald-600 font-bold">{job.salaryRange}</span>
+                          </p>
                         </div>
 
-                        <div className="flex flex-wrap gap-1 mt-2.5">
-                          <span className="bg-white/5 text-[9px] text-slate-400 px-1.5 py-0.2 rounded font-mono">
-                            {job.locationModel}
-                          </span>
-                          <span className="bg-emerald-500/5 text-[9px] text-emerald-400 px-1.5 py-0.2 rounded font-mono">
-                            {job.salaryRange}
-                          </span>
-                          {job.tags.slice(0, 2).map((tg, idx) => (
-                            <span key={idx} className="bg-white/5 text-[9px] text-slate-300 px-1.5 py-0.2 rounded font-sans">
+                        <div className="flex items-center gap-3 shrink-0">
+                          {score > 0 && (
+                            <div className="p-2 px-3 rounded-xl bg-indigo-50 text-indigo-700 text-xs font-mono font-extrabold border border-indigo-100 text-center">
+                              {score}% MATCH
+                            </div>
+                          )}
+                          <div className="text-slate-400">
+                            <ChevronRight className={`w-5 h-5 transition-transform duration-300 ${isSelected ? 'rotate-90 text-indigo-600' : ''}`} />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Job Tags preview block */}
+                      {!isSelected && (
+                        <div className="px-5 md:px-6 pb-5 flex flex-wrap gap-1.5 border-t border-slate-50 pt-3">
+                          {job.tags.map((tg, idx) => (
+                            <span key={idx} className="bg-slate-100 text-[11px] font-bold text-slate-600 px-2.5 py-0.5 rounded-lg">
                               {tg}
                             </span>
                           ))}
                         </div>
-                      </div>
-                    );
-                  })
-                ) : (
-                  <div className="text-center py-10 text-slate-500 text-xs">No matching global openings found.</div>
-                )}
-              </div>
-            </div>
+                      )}
 
-            {/* Job description & fit screening column */}
-            <div className="lg:col-span-2 space-y-5">
-              {selectedJob ? (
-                <div className="border border-white/5 rounded-2xl p-5 bg-slate-900/10 space-y-5">
-                  
-                  {/* Title and stats layout */}
-                  <div className="flex flex-col md:flex-row justify-between items-start md:items-center p-4 bg-slate-950/40 border border-white/5 rounded-2xl gap-4">
-                    <div>
-                      <span className="text-[10px] uppercase font-bold text-cyan-400 font-mono tracking-wider">
-                        AI Matching Analytics
-                      </span>
-                      <h3 className="text-base font-black text-white">{selectedJob.title}</h3>
-                      <p className="text-xs text-slate-400">{selectedJob.company} • {selectedJob.location} ({selectedJob.locationModel})</p>
-                    </div>
-
-                    <div className="flex gap-4 font-mono">
-                      {(() => {
-                        const match = matches.find(m => m.jobId === selectedJob.id);
-                        const score = match ? match.score : 70;
-                        return (
-                          <>
-                            <div className="text-center p-1.5 px-3 bg-cyan-950/20 border border-cyan-500/15 rounded-xl">
-                              <span className="text-[8.5px] font-bold uppercase text-slate-400 font-sans block">Match Alignment</span>
-                              <span className="text-base font-black text-cyan-300">{score}%</span>
-                            </div>
-                            <div className="text-center p-1.5 px-3 bg-emerald-950/20 border border-emerald-500/15 rounded-xl">
-                              <span className="text-[8.5px] font-bold uppercase text-slate-400 font-sans block">Interview Odds</span>
-                              <span className="text-base font-black text-emerald-400">{Math.round(score * 0.95)}%</span>
-                            </div>
-                          </>
-                        );
-                      })()}
-                    </div>
-                  </div>
-
-                  {/* INTERACTIVE SKILL OVERLAY AND DEFICIENCIES ALIGNMENT WITH BRIDGING TIPS */}
-                  {(() => {
-                    const match = matches.find(m => m.jobId === selectedJob.id);
-                    if (!match) return null;
-                    return (
-                      <div className="p-4 bg-slate-950 rounded-xl border border-white/5 space-y-3 font-sans">
-                        <div className="flex items-center gap-1.5">
-                          <Cpu className="w-4 h-4 text-cyan-400 animate-pulse" />
-                          <span className="text-[10px] font-mono font-black text-slate-300 uppercase tracking-wider">Aura Match Analysis Diagnostics</span>
-                        </div>
-                        
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs pt-1">
-                          <div className="space-y-1.5">
-                            <span className="text-[9px] uppercase font-mono font-extrabold text-emerald-400 block tracking-wide">✅ Compliant core skills ({match.matchingSkills.length})</span>
-                            {match.matchingSkills.length > 0 ? (
-                              <div className="flex flex-wrap gap-1">
-                                {match.matchingSkills.map(sk => (
-                                  <span key={sk} className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-[10px] px-2 py-0.5 rounded-md font-medium">
-                                    {sk}
-                                  </span>
-                                ))}
+                      {/* EXPANDED INLINE JOB DETAIL PANEL (Right Below the Card) */}
+                      {isSelected && (
+                        <div className="border-t border-slate-200 bg-slate-50/70 p-6 md:p-8 space-y-6">
+                          
+                          {/* Brief Alignment Diagnostics */}
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="p-4 bg-white rounded-xl border border-slate-200 space-y-1">
+                              <span className="text-xs uppercase font-extrabold text-slate-400 font-mono block">Applicant ATS Compatibility</span>
+                              <div className="text-2xl font-black text-indigo-700 font-mono">
+                                {score}% match overlap
                               </div>
-                            ) : (
-                              <p className="text-[10px] text-slate-500 font-mono italic">No exact matching skills found.</p>
-                            )}
-                          </div>
-
-                          <div className="space-y-1.5">
-                            <span className="text-[9px] uppercase font-mono font-extrabold text-amber-400 block tracking-wide">⚠️ Position Missing Gaps ({match.missingSkills.length})</span>
-                            {match.missingSkills.length > 0 ? (
-                              <div className="flex flex-wrap gap-1">
-                                {match.missingSkills.map(sk => (
-                                  <span key={sk} className="bg-amber-500/10 border border-amber-500/20 text-amber-300 text-[10px] px-2 py-0.5 rounded-md font-medium">
-                                    {sk}
-                                  </span>
-                                ))}
+                            </div>
+                            <div className="p-4 bg-white rounded-xl border border-slate-200 space-y-1">
+                              <span className="text-xs uppercase font-extrabold text-slate-400 font-mono block">Estimated Interview Probability</span>
+                              <div className="text-2xl font-black text-emerald-600 font-mono">
+                                {Math.round(score * 0.95)}% likely
                               </div>
-                            ) : (
-                              <p className="text-[10px] text-emerald-400 font-mono italic">Perfect matching! All query criteria fulfilled.</p>
-                            )}
+                            </div>
                           </div>
+
+                          {/* Action Hub Panel (Autogenerated content & quick links) */}
+                          <div className="p-5 bg-white border border-slate-200 rounded-2xl space-y-4">
+                            <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+                              <div className="space-y-1">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-xs uppercase font-extrabold text-indigo-600 tracking-wider font-mono">
+                                    HR Contact & Pitch Generation Engine
+                                  </span>
+                                  <span className="text-[10px] font-mono font-bold bg-emerald-50 text-emerald-700 border border-emerald-100 p-0.5 px-2 rounded-full">
+                                    DIRECT EMAIL DETECTED
+                                  </span>
+                                </div>
+                                <p className="text-sm text-slate-600">
+                                  Our intelligent engine matched this opening to Talent Acquisition contacts. Generate a tailored pitch email dynamically mapping your profile.
+                                </p>
+                              </div>
+
+                              <button
+                                onClick={() => handleOpenEmailHR(job)}
+                                className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white transition-all text-sm font-bold rounded-xl flex items-center gap-2 shrink-0 cursor-pointer shadow-sm"
+                              >
+                                <Mail className="w-4 h-4 text-white" />
+                                Mail HR Autogenerated Pitch
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Core matching diagnostic (matching vs deficiencies) */}
+                          {match && (
+                            <div className="p-5 bg-white rounded-2xl border border-slate-200 space-y-4">
+                              <div className="flex items-center gap-1.5">
+                                <Cpu className="w-5 h-5 text-indigo-600 animate-pulse" />
+                                <span className="text-xs font-mono font-bold text-slate-700 uppercase tracking-wider">Aura Profile Alignment Analysis</span>
+                              </div>
+
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-5 text-sm">
+                                <div className="space-y-2">
+                                  <span className="text-xs uppercase font-bold text-emerald-700 block">✅ Compliant core skills ({match.matchingSkills.length})</span>
+                                  {match.matchingSkills.length > 0 ? (
+                                    <div className="flex flex-wrap gap-1.5">
+                                      {match.matchingSkills.map(sk => (
+                                        <span key={sk} className="bg-emerald-50 border border-emerald-100 text-emerald-805 text-xs font-semibold px-2.5 py-0.5 rounded-lg">
+                                          {sk}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  ) : (
+                                    <p className="text-xs text-slate-400 font-mono italic">No exact matching skills found.</p>
+                                  )}
+                                </div>
+
+                                <div className="space-y-2">
+                                  <span className="text-xs uppercase font-bold text-amber-700 block">⚠️ Position Missing Gaps ({match.missingSkills.length})</span>
+                                  {match.missingSkills.length > 0 ? (
+                                    <div className="flex flex-wrap gap-1.5">
+                                      {match.missingSkills.map(sk => (
+                                        <span key={sk} className="bg-amber-50 border border-amber-100 text-amber-805 text-xs font-semibold px-2.5 py-0.5 rounded-lg">
+                                          {sk}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  ) : (
+                                    <p className="text-xs text-emerald-600 font-bold italic">Perfect alignment! All requirements fulfilled.</p>
+                                  )}
+                                </div>
+                              </div>
+
+                              {match.missingSkills.length > 0 && (
+                                <div className="p-4 bg-amber-50/40 text-xs rounded-xl border border-amber-100 text-amber-900 space-y-1.5 leading-relaxed font-sans font-medium">
+                                  <p className="font-extrabold text-amber-805">💡 Tailored Profile Bridging & Application Strategy:</p>
+                                  <p>To bypass automated filters, focus your covers on <strong>{match.missingSkills.slice(0, 2).join(' and ')}</strong>. You can practice responding to these gaps under our Interview tab to train your pitch replies.</p>
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Requirements & Skill Radar Grid */}
+                          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            <div className="space-y-3 p-5 bg-white rounded-2xl border border-slate-205">
+                              <h4 className="text-xs uppercase font-black tracking-wider text-slate-500 font-mono">Position Requirements & Key Duties</h4>
+                              <ul className="space-y-2 text-sm text-slate-600 font-medium">
+                                {job.requirements.map((req, i) => (
+                                  <li key={i} className="flex gap-2 items-start">
+                                    <span className="text-indigo-600 shrink-0 text-base font-extrabold leading-none">•</span>
+                                    <span>{req}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+
+                            <div className="p-5 bg-white rounded-2xl border border-slate-205 flex flex-col items-center justify-center">
+                              <SkillRadarChart 
+                                requirements={job.requirements}
+                                matchingSkills={matches.find(m => m.jobId === job.id)?.matchingSkills || []}
+                                missingSkills={matches.find(m => m.jobId === job.id)?.missingSkills || []}
+                                jobTitle={job.title}
+                              />
+                            </div>
+                          </div>
+
+                          {/* Detailed Job Description Section */}
+                          <div className="space-y-3 p-5 bg-white rounded-2xl border border-slate-205">
+                            <h4 className="text-xs uppercase font-black tracking-wider text-slate-500 font-mono">Job Description Details</h4>
+                            <p className="text-sm text-slate-700 leading-relaxed font-sans italic whitespace-pre-wrap bg-slate-50 p-4 rounded-xl border border-slate-200">
+                              &ldquo;{job.description}&rdquo;
+                            </p>
+                          </div>
+
+                          {/* Interactive Submission Footer triggers */}
+                          <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center pt-4 border-t border-slate-200 gap-4">
+                            <span className="text-xs text-slate-400 font-mono font-semibold">
+                              Applications Deadline: 2026-06-30
+                            </span>
+
+                            <div className="flex gap-3">
+                              <button
+                                onClick={() => {
+                                  setPortalSimulatorJob(job);
+                                  setPortalFullName(user.fullName || '');
+                                  setPortalEmail(user.email || '');
+                                  setPortalSuccess(false);
+                                  setPortalCoverLetterText(`Dear Hiring Team,\n\nI am extremely excited to apply for the ${job.title} position at ${job.company}. Based on my background in professional engineering projects and related certifications, I believe i am a wonderful fit for this vacancy.\n\nBest regards,\n${user.fullName || 'Applicant'}`);
+                                }}
+                                className="px-4.5 py-2.5 border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-bold flex items-center gap-2 cursor-pointer transition-all shadow-sm"
+                              >
+                                <ExternalLink className="w-4 h-4 text-indigo-600" />
+                                Original Corporate Post
+                              </button>
+                              
+                              <button
+                                onClick={() => handleOpenApplySim(job)}
+                                className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white transition-all text-xs font-bold rounded-xl cursor-pointer shadow-sm shadow-indigo-600/10"
+                              >
+                                Smart AI Instant Apply
+                              </button>
+                            </div>
+                          </div>
+
                         </div>
-
-                        {match.missingSkills.length > 0 && (
-                          <div className="mt-2.5 p-3 bg-amber-500/5 text-[10.5px] rounded-lg border border-amber-500/10 text-slate-300 space-y-1 leading-normal font-sans">
-                            <p className="font-bold text-amber-300">💡 Custom Remediation & Career Bridging Strategy:</p>
-                            <p>To maximize interview selection probability past the ATS threshold, include microprojects involving <strong>{match.missingSkills.slice(0, 2).join(' and ')}</strong> on your resume profile. Address these direct technical gaps under your "Interactive Interview Coach" tab to drill target replies.</p>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })()}
-
-                  {/* Requirements grid */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <h4 className="text-[10.5px] uppercase font-bold tracking-wider text-slate-400">Position Requirements</h4>
-                      <ul className="space-y-1.5 text-xs text-slate-300">
-                        {selectedJob.requirements.map((req, i) => (
-                          <li key={i} className="flex gap-1.5 items-start">
-                            <span className="text-cyan-400 shrink-0">•</span>
-                            <span>{req}</span>
-                          </li>
-                        ))}
-                      </ul>
+                      )}
                     </div>
-
-                    {/* Skills radar diagram card */}
-                    <div>
-                      <SkillRadarChart 
-                        requirements={selectedJob.requirements}
-                        matchingSkills={matches.find(m => m.jobId === selectedJob.id)?.matchingSkills || []}
-                        missingSkills={matches.find(m => m.jobId === selectedJob.id)?.missingSkills || []}
-                        jobTitle={selectedJob.title}
-                      />
-                    </div>
-                  </div>
-
-                  {/* Public recruiting contact matching */}
-                  <div className="p-4 bg-indigo-950/15 border border-indigo-500/15 rounded-xl flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-[9.5px] uppercase font-extrabold text-indigo-400 tracking-widest font-mono">HR Email Discovery Engine</span>
-                        <span className="text-[8px] uppercase px-1.5 py-0.2 bg-emerald-400/10 text-emerald-400 font-extrabold rounded border border-emerald-500/15">PASS DISCOVERED</span>
-                      </div>
-                      <p className="text-xs text-slate-300 leading-normal">Uncovered Talent Acquisition contact coordinates. Draft a fully-personalized dynamic email using resume parameters.</p>
-                    </div>
-
-                    <button
-                      onClick={() => handleOpenEmailHR(selectedJob)}
-                      className="px-4 py-2 bg-indigo-500/25 border border-indigo-400/20 hover:bg-indigo-500/35 hover:scale-[1.01] transition-all text-xs font-bold text-indigo-300 rounded-xl flex items-center gap-1 shrink-0 cursor-pointer"
-                    >
-                      <Mail className="w-3.5 h-3.5 text-indigo-300" />
-                      Automate HR Email
-                    </button>
-                  </div>
-
-                  {/* Job Description details block */}
-                  <div className="space-y-2">
-                    <h4 className="text-[10.5px] uppercase font-bold tracking-wider text-slate-400">Opening Description</h4>
-                    <p className="text-xs text-slate-300 leading-relaxed font-sans italic p-3 rounded-xl border border-white/5 bg-slate-950/20">&ldquo;{selectedJob.description}&rdquo;</p>
-                  </div>
-
-                  {/* Direct buttons triggers */}
-                  <div className="flex justify-between items-center pt-4 border-t border-white/5">
-                    <span className="text-[10px] text-slate-500 font-mono">Deadline: 2026-06-30</span>
-                    
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => {
-                          setPortalSimulatorJob(selectedJob);
-                          setPortalFullName(user.fullName || '');
-                          setPortalEmail(user.email || '');
-                          setPortalSuccess(false);
-                          setPortalCoverLetterText(`Dear Hiring Team,\n\nI am extremely excited to apply for the ${selectedJob.title} position at ${selectedJob.company}. Based on my background in professional engineering projects and related certifications, I believe i am a wonderful fit for this vacancy.\n\nBest regards,\n${user.fullName || 'Applicant'}`);
-                        }}
-                        className="px-3.5 py-2 hover:bg-slate-800 border border-slate-705 bg-slate-900 rounded-xl text-xs font-bold text-slate-100 flex items-center gap-1 cursor-pointer transition-all"
-                      >
-                        <ExternalLink className="w-3.5 h-3.5 text-cyan-400" />
-                        Original Post
-                      </button>
-                      <button
-                        onClick={() => handleOpenApplySim(selectedJob)}
-                        className="px-4 py-2 bg-cyan-400 text-slate-950 hover:bg-cyan-300 transition-all text-xs font-black rounded-xl cursor-pointer"
-                      >
-                        Smart AI Apply
-                      </button>
-                    </div>
-                  </div>
-
-                </div>
+                  );
+                })
               ) : (
-                <div className="text-center py-20 text-slate-500 text-xs text-slate-405 font-mono">No active job selected. Select a listing on the Left Panel.</div>
+                <div className="text-center py-20 bg-white border border-slate-200 rounded-2xl text-slate-400 text-sm font-medium">
+                  No matching global openings found. Try adjusting your preferences.
+                </div>
               )}
             </div>
 
           </div>
         </div>
       )}
+    </div>
+  )}
 
       {seekerTab === 'match' && (
         <JobMatch 
@@ -1157,6 +1189,13 @@ Please find my customized full-stack credentials enclosed for your immediate con
           uploadingResume={uploadingResume}
           onRefreshTelemetry={onRefreshTelemetry}
           token={token}
+          onApplyRedirect={(job) => {
+            setPortalSimulatorJob(job);
+            setPortalFullName(user.fullName || '');
+            setPortalEmail(user.email || '');
+            setPortalSuccess(false);
+            setPortalCoverLetterText(`Dear Hiring Team,\n\nI am extremely excited to apply for the ${job.title} position at ${job.company}. Based on my background in professional engineering projects and related certifications, I believe I am a wonderful fit for this vacancy.\n\nBest regards,\n${user.fullName || 'Applicant'}`);
+          }}
         />
       )}
 
@@ -1677,6 +1716,117 @@ Please find my customized full-stack credentials enclosed for your immediate con
               </div>
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {seekerTab === 'visitors' && (
+        <div className="space-y-6">
+          {/* Analytics Banner */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+            <div className="bg-gradient-to-br from-indigo-50 to-indigo-100 border border-indigo-200 rounded-3xl p-6 shadow-sm relative overflow-hidden">
+              <div className="absolute right-3.5 top-3.5 text-indigo-300 select-none">
+                <Users className="w-16 h-16 opacity-20 stroke-[1.5]" />
+              </div>
+              <div className="space-y-1">
+                <span className="text-[10px] uppercase font-black text-indigo-700 tracking-wider font-mono">Total Visual Clicks</span>
+                <h3 className="text-3xl font-black text-indigo-950 font-sans tracking-tight">{profileViews.length}</h3>
+                <p className="text-xs text-indigo-800/80 font-medium leading-normal">Aggregate number of recruiters viewing your complete resume indices.</p>
+              </div>
+            </div>
+
+            <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm relative overflow-hidden">
+              <div className="space-y-1">
+                <span className="text-[10px] uppercase font-black text-slate-500 tracking-wider font-mono">Top Recruiting Partner</span>
+                <h3 className="text-base font-extrabold text-slate-900 font-sans truncate">
+                  {profileViews.length > 0 
+                    ? (profileViews[profileViews.length - 1].metadata?.companyName || profileViews[profileViews.length - 1].metadata?.company || "Verified Employer")
+                    : "Waiting for clicks"}
+                </h3>
+                <p className="text-xs text-slate-500 font-medium leading-normal">Enterprise partner that recently completed your portfolio match analysis.</p>
+              </div>
+            </div>
+
+            <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm relative overflow-hidden">
+              <div className="space-y-1">
+                <span className="text-[10px] uppercase font-black text-slate-500 tracking-wider font-mono">Last Activity Logged</span>
+                <h3 className="text-xs font-bold text-slate-900 font-mono">
+                  {profileViews.length > 0 
+                    ? new Date(profileViews[profileViews.length - 1].timestamp).toLocaleString()
+                    : "No views recorded yet"}
+                </h3>
+                <p className="text-xs text-slate-500 font-medium leading-normal">Last verified timestamp an employer fetched credentials payload.</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Historical Log */}
+          <div className="bg-white border border-slate-200 rounded-3xl shadow-sm overflow-hidden text-slate-800">
+            <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+              <div className="space-y-0.5">
+                <h3 className="text-sm font-black text-slate-900 uppercase tracking-tight">Active Recruiter Audits Log</h3>
+                <p className="text-xs text-slate-500">Chronological history of executive talent matches & profile view activity</p>
+              </div>
+              <button 
+                onClick={fetchProfileViews}
+                className="px-3.5 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-bold hover:bg-slate-50 cursor-pointer text-slate-600 inline-flex items-center gap-1.5 transition-all shadow-sm"
+              >
+                <RefreshCw className="w-3.5 h-3.5 text-indigo-600" />
+                <span>Sync Logs</span>
+              </button>
+            </div>
+
+            <div className="divide-y divide-slate-100">
+              {profileViews.length === 0 ? (
+                <div className="p-12 text-center space-y-4">
+                  <div className="w-14 h-14 bg-slate-100 rounded-full border border-slate-200/50 text-slate-400 flex items-center justify-center mx-auto">
+                    <Eye className="w-7 h-7 text-slate-400" />
+                  </div>
+                  <div className="max-w-md mx-auto space-y-1">
+                    <h4 className="text-xs font-black text-slate-700">Your profile hasn't been clicked of late.</h4>
+                    <p className="text-xs text-slate-400">Optimize your resume ATS index or compatibility indicators in the matches index to gain recruiter highlight priority!</p>
+                  </div>
+                </div>
+              ) : (
+                [...profileViews].reverse().map((view, i) => {
+                  const companyName = view.metadata?.companyName || view.metadata?.company || "Enterprise Recruiter";
+                  const employerName = view.metadata?.employerName || "Talent Acquisition Lead";
+                  return (
+                    <div key={view.id} className="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-slate-50/50 transition-all">
+                      <div className="flex items-start gap-4">
+                        <div className="w-10 h-10 shrink-0 bg-indigo-50 text-indigo-600 rounded-xl border border-indigo-100 flex items-center justify-center font-black font-mono">
+                          {companyName ? companyName.charAt(0).toUpperCase() : "E"}
+                        </div>
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-xs font-extrabold text-slate-900">{employerName}</span>
+                            <span className="text-[10px] font-black uppercase font-mono px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded-full border border-indigo-100">
+                              {companyName}
+                            </span>
+                            {i === 0 && (
+                              <span className="text-[9px] font-black uppercase font-mono px-1.5 py-0.5 bg-emerald-50 text-emerald-700 rounded border border-emerald-100 animate-pulse">
+                                Most Recent View
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-slate-600 leading-relaxed max-w-2xl">
+                            {view.message || "Recruiter reviewed your custom resume credentials and talent qualification index details."}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="sm:text-right shrink-0">
+                        <span className="text-xs font-bold text-slate-950 block">
+                          {new Date(view.timestamp).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                        </span>
+                        <span className="text-[10px] text-slate-500 font-mono">
+                          {new Date(view.timestamp).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
           </div>
         </div>
       )}

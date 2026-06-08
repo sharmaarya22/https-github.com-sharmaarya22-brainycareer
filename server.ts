@@ -98,6 +98,8 @@ const DB_FILE = path.join(process.cwd(), "db.json");
 interface DBStructure {
   users: any[];
   jobs: any[];
+  messages?: any[];
+  notifications?: any[];
 }
 
 // 8 Robust, industry-diverse real-looking job postings
@@ -291,8 +293,30 @@ function initDB() {
     }
   }
 
-  // Always refresh jobs list to ensure all global jobs are populated with correct URLs and countries
-  data.jobs = defaultJobsList;
+  // Always ensure default jobs are present, but also preserve newly posted jobs!
+  if (!data.jobs || !Array.isArray(data.jobs) || data.jobs.length === 0) {
+    data.jobs = defaultJobsList;
+  } else {
+    defaultJobsList.forEach((dfJob: any) => {
+      const existing = data.jobs.find((j: any) => j.id === dfJob.id);
+      if (!existing) {
+        data.jobs.push(dfJob);
+      } else {
+        // preserve status if already defined
+        if (!existing.status) existing.status = "Open";
+      }
+    });
+  }
+
+  // Ensure message queue structure is initialized
+  if (!data.messages || !Array.isArray(data.messages)) {
+    data.messages = [];
+  }
+
+  // Ensure notification collection structure is initialized
+  if (!data.notifications || !Array.isArray(data.notifications)) {
+    data.notifications = [];
+  }
 
   // Guarantee that the super admin user with email "gauravadmin" and password "041988" exists
   if (!data.users || !Array.isArray(data.users)) {
@@ -416,14 +440,29 @@ app.post("/api/auth/register", async (req, res) => {
     return res.status(400).json({ error: "All profile fields are mandatory." });
   }
 
-  // Robust field validation
+  // Reject registering as admin or superadmin
+  const requestedRole = (role || "seeker").toLowerCase();
+  if (requestedRole === "admin" || requestedRole === "superadmin") {
+    return res.status(400).json({ error: "Administrator registration is restricted. Please login using your assigned admin credentials." });
+  }
+
+  // Reject registering emails or usernames matching and reserving Gauravadmin identifier
+  const cleanEmail = email.trim().toLowerCase();
+  if (cleanEmail === "gauravadmin" || cleanEmail.includes("gauravadmin")) {
+    return res.status(400).json({ error: "Registration for system administrator identifiers is restricted." });
+  }
+
   const cleanName = fullName.trim();
+  if (cleanName.toLowerCase() === "gauravadmin") {
+    return res.status(400).json({ error: "The name 'Gauravadmin' is reserved for system administrators." });
+  }
+
   if (cleanName.length < 3) {
     return res.status(400).json({ error: "Please enter your full professional name (minimum 3 characters)." });
   }
 
-  const cleanEmail = email.trim();
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  // Let's only validate standard email pattern if it's not our preset admin usernames
   if (!emailRegex.test(cleanEmail)) {
     return res.status(400).json({ error: "The email address entered is invalid. Please supply a standard email pattern (e.g. name@domain.com)." });
   }
@@ -1046,6 +1085,7 @@ app.post("/api/resume/upload", authenticateToken, async (req: any, res) => {
 
   targetUser.resumeText = parsedText;
   targetUser.resumeFileName = fileName || "resume.txt";
+  targetUser.resumeBase64 = fileBase64 || Buffer.from(parsedText).toString('base64');
 
   if (targetUser.preferences) {
     targetUser.profileCompleted = true;
@@ -1232,6 +1272,38 @@ app.get("/api/jobs/metadata", (req, res) => {
   res.json({ countries, sources });
 });
 
+// Dynamic helpers to calculate real + seeded counts and relative times
+function getJobAppliedCount(jobId: string, usersList: any[] = []) {
+  let count = 0;
+  if (usersList && Array.isArray(usersList)) {
+    usersList.forEach((u: any) => {
+      if (u.applications && Array.isArray(u.applications)) {
+        if (u.applications.some((app: any) => app.jobId === jobId)) {
+          count++;
+        }
+      }
+    });
+  }
+  // Stable calculation based on jobId characters
+  let hash = 0;
+  for (let i = 0; i < jobId.length; i++) {
+    hash = jobId.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const seed = (Math.abs(hash) % 24) + 6; // stable random between 6 and 29 applicants
+  return count + seed;
+}
+
+function getJobPostedAgo(postedDate: string) {
+  if (!postedDate) return "2 days ago";
+  const now = new Date("2026-06-08T07:00:00Z");
+  const posted = new Date(postedDate);
+  const diffTime = Math.abs(now.getTime() - posted.getTime());
+  const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+  if (diffDays <= 0) return "Posted today";
+  if (diffDays === 1) return "Posted yesterday";
+  return `Posted ${diffDays} days ago`;
+}
+
 // Jobs Engine endpoint - standard list/filter (Remote,hybrid,onsite,experienceLevel,searchKeyword,country,source)
 app.get("/api/jobs", (req, res) => {
   let filteredJobs = [...db.jobs];
@@ -1266,7 +1338,14 @@ app.get("/api/jobs", (req, res) => {
     filteredJobs.sort((a, b) => new Date(b.postedDate).getTime() - new Date(a.postedDate).getTime());
   }
 
-  res.json({ jobs: filteredJobs });
+  // Enrich with live dynamic stats
+  const enrichedJobs = filteredJobs.map(job => ({
+    ...job,
+    appliedCount: getJobAppliedCount(job.id, db.users),
+    postedAgo: getJobPostedAgo(job.postedDate)
+  }));
+
+  res.json({ jobs: enrichedJobs });
 });
 
 // AI Portal Matchmaking: Calculates optimal matches for jobs based on candidate's parsed resume and preferences
@@ -1466,16 +1545,26 @@ app.get("/api/jobs/matched", authenticateToken, async (req: any, res) => {
     // Merge resources and sort globally by score
     const finalMatched = [...aiMatches, ...fallbackMatches].sort((a, b) => b.score - a.score);
     
+    // Enrich with dynamic counters
+    const enrichedMatched = finalMatched.map(item => ({
+      ...item,
+      job: {
+        ...item.job,
+        appliedCount: getJobAppliedCount(item.job.id, db.users),
+        postedAgo: getJobPostedAgo(item.job.postedDate)
+      }
+    }));
+
     // Cache the fully calculated matchups
-    targetUser.matchedCache = finalMatched;
+    targetUser.matchedCache = enrichedMatched;
     saveDB();
 
-    res.json({ matches: finalMatched });
+    res.json({ matches: enrichedMatched });
 
   } catch (error: any) {
     console.warn("Gemini Job Matchmaking Error, resorting to default fast matching:", error.message || error);
     
-    const fallbackMatches = preScoredJobs.map(item => {
+    const fallbackRaw = preScoredJobs.map(item => {
       const job = item.job;
       const matchingSkills = item.matchedReqs;
       const missingSkills = job.requirements.filter((req: string) => !matchingSkills.includes(req));
@@ -1493,11 +1582,20 @@ app.get("/api/jobs/matched", authenticateToken, async (req: any, res) => {
       };
     }).sort((a, b) => b.score - a.score);
 
+    const fallbackMatchesDecorated = fallbackRaw.map(item => ({
+      ...item,
+      job: {
+        ...item.job,
+        appliedCount: getJobAppliedCount(item.job.id, db.users),
+        postedAgo: getJobPostedAgo(item.job.postedDate)
+      }
+    }));
+
     // Cache the fallback matches as well so we do not spam Gemini during a 429 quota exhaustion window
-    targetUser.matchedCache = fallbackMatches;
+    targetUser.matchedCache = fallbackMatchesDecorated;
     saveDB();
 
-    res.json({ matches: fallbackMatches });
+    res.json({ matches: fallbackMatchesDecorated });
   }
 });
 
@@ -1758,6 +1856,291 @@ app.post("/api/interview/ask", authenticateToken, async (req: any, res) => {
       warning: "Offline simulator activated due to rate limits."
     });
   }
+});
+
+// -------------------------------------------------------------
+// NEW ADVANCED ENDPOINTS (MESSAGING, RESUME DOWNLOAD, EMPLOYER)
+// -------------------------------------------------------------
+
+// 1. Send/Post a Message
+app.post("/api/messages", authenticateToken, async (req: any, res) => {
+  const { receiverId, jobId, content } = req.body;
+  if (!content || !content.trim()) {
+    return res.status(400).json({ error: "Message content cannot be blank." });
+  }
+
+  if (!db.messages) db.messages = [];
+
+  const newMessage = {
+    id: "msg-" + Date.now(),
+    senderId: req.user.id,
+    receiverId,
+    jobId: jobId || "general",
+    content: content.trim(),
+    timestamp: new Date().toISOString()
+  };
+
+  db.messages.push(newMessage);
+  saveDB();
+
+  res.json({ message: newMessage });
+});
+
+// 2. Fetch all Messages for the current user (either sender or receiver)
+app.get("/api/messages", authenticateToken, async (req: any, res) => {
+  if (!db.messages) db.messages = [];
+  const userMessages = db.messages.filter(m => m.senderId === req.user.id || m.receiverId === req.user.id);
+  res.json({ messages: userMessages });
+});
+
+// 3. Get all registered applicants (seekers) for Employer screening
+app.get("/api/applicants", authenticateToken, async (req: any, res) => {
+  // Return users who identify as seeker or have a resume text in database
+  const applicants = db.users.filter(u => u.role === 'seeker' || u.resumeText);
+  res.json({ applicants });
+});
+
+// 3.5. Get notifications for the currently logged-in user
+app.get("/api/notifications", authenticateToken, async (req: any, res) => {
+  if (!db.notifications) db.notifications = [];
+  const userNotifications = db.notifications.filter((n: any) => n.userId === req.user.id);
+  res.json({ notifications: userNotifications });
+});
+
+// 3.6. Mark notifications as read
+app.post("/api/notifications/read", authenticateToken, async (req: any, res) => {
+  const { ids } = req.body;
+  if (!db.notifications) db.notifications = [];
+  
+  db.notifications.forEach((n: any) => {
+    if (n.userId === req.user.id && (!ids || ids.includes(n.id))) {
+      n.read = true;
+    }
+  });
+  saveDB();
+  res.json({ success: true });
+});
+
+// 3.7. Log that an employer viewed a jobseeker's profile
+app.post("/api/applicants/:id/view", authenticateToken, async (req: any, res) => {
+  const candidateId = req.params.id;
+  const candidate = db.users.find((u: any) => u.id === candidateId);
+  if (!candidate) return res.status(404).json({ error: "Candidate profile not found." });
+
+  const employerName = req.user.fullName || "An Employer Partner";
+  const companyName = req.user.company || "Aria Recruiting & AI Market Partners";
+
+  if (!db.notifications) db.notifications = [];
+  
+  // Throttle duplicate view notifications within the last 5 minutes to prevent spamming
+  const fiveMinsAgo = Date.now() - 5 * 60 * 1000;
+  const recentView = db.notifications.find((n: any) => 
+    n.userId === candidateId && 
+    n.type === "profile_view" && 
+    n.metadata?.employerId === req.user.id && 
+    new Date(n.timestamp).getTime() > fiveMinsAgo
+  );
+
+  if (!recentView) {
+    const newNotif = {
+      id: "notif-" + Date.now() + "-" + Math.random().toString(36).substring(2, 7),
+      userId: candidateId,
+      title: "Profile Clicked & Reviewed",
+      message: `${employerName} checked your complete ATS candidate index profile, analyzed key strengths, and reviewed your portfolio resume directly.`,
+      type: "profile_view",
+      metadata: {
+        employerId: req.user.id,
+        employerName,
+        companyName,
+        timestamp: new Date().toISOString()
+      },
+      read: false,
+      timestamp: new Date().toISOString()
+    };
+    db.notifications.push(newNotif);
+    saveDB();
+    res.json({ success: true, notification: newNotif });
+  } else {
+    res.json({ success: true, duplicatedThrottled: true });
+  }
+});
+
+// 3.8. Update candidate applications and push a status notification
+app.post("/api/applicants/:id/status", authenticateToken, async (req: any, res) => {
+  const candidateId = req.params.id;
+  const { status, jobId } = req.body; // e.g. "SHORTLISTED", "Interview Scheduled", "Offer Received", "UNDER_REVIEW", "ARCHIVED"
+
+  if (!status) {
+    return res.status(400).json({ error: "Candidate status parameter is required." });
+  }
+
+  const candidate = db.users.find((u: any) => u.id === candidateId);
+  if (!candidate) return res.status(404).json({ error: "Candidate profile not found." });
+
+  // Update user-level status
+  candidate.status = status;
+
+  // Find job details
+  const job = db.jobs.find((j: any) => j.id === jobId) || { title: "AI Engineering Position", company: "Aura Global Partner" };
+
+  // Sync to candidate applications array
+  if (!candidate.applications) candidate.applications = [];
+  let appItem = candidate.applications.find((a: any) => a.jobId === jobId);
+  if (!appItem && jobId) {
+    // create dynamic backfilled application if skipped
+    appItem = {
+      jobId,
+      jobTitle: job.title,
+      company: job.company,
+      source: "Aura AI",
+      appliedAt: new Date().toISOString(),
+      coverLetter: "Dynamic system evaluation",
+      status: status
+    };
+    candidate.applications.push(appItem);
+  } else if (appItem) {
+    appItem.status = status;
+  }
+
+  // Record a beautiful, detailed notification
+  if (!db.notifications) db.notifications = [];
+  const statusLabels: Record<string, string> = {
+    "UNDER_REVIEW": "Under Active HR Review",
+    "SHORTLISTED": "Congratulations! Shortlisted",
+    "Interview Scheduled": "Interview Scheduled!",
+    "Offer Received": "Official Job Offer Received 🎉",
+    "ARCHIVED": "Archived (Candidate Pool)"
+  };
+
+  const statusLabel = statusLabels[status] || status;
+  const newNotif = {
+    id: "notif-" + Date.now() + "-" + Math.random().toString(36).substring(2, 7),
+    userId: candidateId,
+    title: `Role Status Alert: ${statusLabel}`,
+    message: `Your application status for the "${job.title}" role at ${job.company} has been updated to "${statusLabel}". Check your dashboard tracker for next milestones!`,
+    type: "application_update",
+    metadata: {
+      status,
+      jobId,
+      jobTitle: job.title,
+      company: job.company,
+      timestamp: new Date().toISOString()
+    },
+    read: false,
+    timestamp: new Date().toISOString()
+  };
+
+  db.notifications.push(newNotif);
+  saveDB();
+
+  res.json({ success: true, status, notification: newNotif, candidateApplications: candidate.applications });
+});
+
+// 4. Download a candidate's resume
+app.get("/api/users/:userId/resume/download", async (req, res) => {
+  const { userId } = req.params;
+  const targetUser = db.users.find(u => u.id === userId);
+  if (!targetUser || !targetUser.resumeText) {
+    return res.status(404).json({ error: "Resume profile not found." });
+  }
+
+  const fileName = targetUser.resumeFileName || "candidate_resume.txt";
+  res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+  
+  if (targetUser.resumeBase64) {
+    res.setHeader("Content-Type", "application/octet-stream");
+    return res.send(Buffer.from(targetUser.resumeBase64, "base64"));
+  } else {
+    res.setHeader("Content-Type", "text/plain");
+    return res.send(Buffer.from(targetUser.resumeText));
+  }
+});
+
+// 5. Create a new Job Listing
+app.post("/api/jobs", authenticateToken, async (req: any, res) => {
+  const { title, company, description, requirements, responsibilities, location, locationModel, salaryRange, tags, originalUrl } = req.body;
+  if (!title || !location || !salaryRange) {
+    return res.status(400).json({ error: "Missing required job listing fields." });
+  }
+
+  const newJob = {
+    id: "job-" + Date.now(),
+    title,
+    company: company || "Brainy Career Corp",
+    logo: (company || "Brainy Career Corp").substring(0, 2).toUpperCase(),
+    description: description || "AI-optimized developer opening.",
+    requirements: Array.isArray(requirements) ? requirements : (requirements || "").split(",").map((r: string) => r.trim()),
+    responsibilities: Array.isArray(responsibilities) ? responsibilities : (responsibilities || "Lead engineering projects").split(",").map((r: string) => r.trim()),
+    location,
+    locationModel: locationModel || "Remote",
+    salaryRange,
+    postedDate: new Date().toISOString().split('T')[0],
+    tags: Array.isArray(tags) ? tags : (tags || "Software").split(",").map((t: string) => t.trim()),
+    originalUrl: originalUrl || "#",
+    status: "Open"
+  };
+
+  db.jobs.push(newJob);
+  saveDB();
+
+  res.json({ job: newJob });
+});
+
+// 6. Update/Edit a Job Listing
+app.put("/api/jobs/:id", authenticateToken, async (req: any, res) => {
+  const { id } = req.params;
+  const job = db.jobs.find(j => j.id === id);
+  if (!job) {
+    return res.status(404).json({ error: "Job listing not found." });
+  }
+
+  // Prevent edit if already closed
+  if (job.status === "Closed") {
+    return res.status(400).json({ error: "Cannot edit closed job postings." });
+  }
+
+  const { title, company, description, requirements, responsibilities, location, locationModel, salaryRange, tags, originalUrl, status } = req.body;
+
+  if (title !== undefined) job.title = title;
+  if (company !== undefined) job.company = company;
+  if (description !== undefined) job.description = description;
+  if (requirements !== undefined) {
+    job.requirements = Array.isArray(requirements) ? requirements : requirements.split(",").map((r: string) => r.trim());
+  }
+  if (responsibilities !== undefined) {
+    job.responsibilities = Array.isArray(responsibilities) ? responsibilities : responsibilities.split(",").map((r: string) => r.trim());
+  }
+  if (location !== undefined) job.location = location;
+  if (locationModel !== undefined) job.locationModel = locationModel;
+  if (salaryRange !== undefined) job.salaryRange = salaryRange;
+  if (tags !== undefined) {
+    job.tags = Array.isArray(tags) ? tags : tags.split(",").map((t: string) => t.trim());
+  }
+  if (originalUrl !== undefined) job.originalUrl = originalUrl;
+  if (status !== undefined) job.status = status;
+
+  saveDB();
+  res.json({ job });
+});
+
+// 7. Update status of a Job Listing (Open/Closed)
+app.patch("/api/jobs/:id/status", authenticateToken, async (req: any, res) => {
+  const { id } = req.params;
+  const { status } = req.body;
+  
+  if (status !== "Open" && status !== "Closed") {
+    return res.status(400).json({ error: "Status must be either 'Open' or 'Closed'." });
+  }
+
+  const job = db.jobs.find(j => j.id === id);
+  if (!job) {
+    return res.status(404).json({ error: "Job listing not found." });
+  }
+
+  job.status = status;
+  saveDB();
+
+  res.json({ job });
 });
 
 // Setup Vite Dev middleware + static asset routing rules

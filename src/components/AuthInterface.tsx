@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
-import { User, Lock, Mail, UserPlus, Briefcase, Sparkles, AlertCircle } from 'lucide-react';
+import { User, Lock, Mail, UserPlus, Briefcase, Sparkles, AlertCircle, ChevronRight } from 'lucide-react';
 
 interface AuthInterfaceProps {
   onAuthSuccess: (user: any, token: string) => void;
@@ -11,7 +11,7 @@ export default function AuthInterface({ onAuthSuccess }: AuthInterfaceProps) {
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [selectedRole, setSelectedRole] = useState<'seeker' | 'employer' | 'admin'>('seeker');
+  const [selectedRole, setSelectedRole] = useState<'seeker' | 'employer'>('seeker');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -44,25 +44,26 @@ export default function AuthInterface({ onAuthSuccess }: AuthInterfaceProps) {
   };
 
   return (
-    <div id="auth-container" className="min-h-screen bg-[#0f172a] relative flex flex-col justify-center items-center py-12 px-4 sm:px-6 lg:px-8 overflow-hidden text-slate-100 font-sans">
-      {/* Background Mesh Gradients */}
-      <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-indigo-600/20 rounded-full blur-[120px] pointer-events-none"></div>
-      <div className="absolute bottom-[-10%] right-[-10%] w-[60%] h-[60%] bg-cyan-600/15 rounded-full blur-[150px] pointer-events-none"></div>
-      <div className="absolute top-[20%] right-[10%] w-[35%] h-[35%] bg-purple-600/15 rounded-full blur-[100px] pointer-events-none"></div>
+    <div id="auth-container" className="min-h-screen bg-slate-50 relative flex flex-col justify-center items-center py-16 px-4 sm:px-6 lg:px-8 overflow-hidden text-slate-800 font-sans">
+      {/* Background soft pastel blurs */}
+      <div className="absolute top-[-10%] left-[-15%] w-[60%] h-[60%] bg-indigo-100/60 rounded-full blur-[140px] pointer-events-none"></div>
+      <div className="absolute bottom-[-10%] right-[-15%] w-[60%] h-[60%] bg-teal-50/70 rounded-full blur-[140px] pointer-events-none"></div>
 
-      <div className="sm:mx-auto sm:w-full sm:max-w-md relative z-10 text-center mb-8">
+      <div className="sm:mx-auto sm:w-full sm:max-w-lg relative z-10 text-center mb-8">
         <div className="flex justify-center items-center gap-3">
-          <div className="w-10 h-10 bg-gradient-to-br from-cyan-400 to-indigo-600 rounded-xl flex items-center justify-center font-bold text-xl shadow-lg shadow-indigo-500/10 text-white">
-            <Briefcase className="w-5 h-5 text-white" />
+          <div className="w-12 h-12 bg-indigo-600 rounded-xl flex items-center justify-center font-bold text-2xl shadow-xl shadow-indigo-200 text-white">
+            <Briefcase className="w-6 h-6 text-white" />
           </div>
-          <span className="text-2xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-400">
+          <span className="text-3xl font-extrabold tracking-tight text-slate-900">
             NexGen AI Jobs
           </span>
         </div>
-        <h2 className="mt-4 text-3xl font-extrabold tracking-tight text-white leading-tight">
+        
+        <h2 className="mt-6 text-4xl font-extrabold tracking-tight text-slate-900 leading-tight">
           {isLogin ? 'Sign in to your portal' : 'Create your AI profile'}
         </h2>
-        <p className="mt-2 text-sm text-slate-400">
+        
+        <p className="mt-3 text-base text-slate-600">
           Or{' '}
           <button
             id="toggle-auth-btn"
@@ -70,68 +71,68 @@ export default function AuthInterface({ onAuthSuccess }: AuthInterfaceProps) {
               setIsLogin(!isLogin);
               setError(null);
             }}
-            className="font-semibold text-cyan-400 hover:text-cyan-300 transition-colors focus:outline-none cursor-pointer underline decoration-cyan-400/30 underline-offset-4"
+            className="font-bold text-indigo-600 hover:text-indigo-800 transition-colors focus:outline-none cursor-pointer underline decoration-indigo-300 underline-offset-4 text-base"
           >
             {isLogin ? 'register a new candidate account' : 'sign in with your existing credentials'}
           </button>
         </p>
       </div>
 
-      <div className="sm:mx-auto sm:w-full sm:max-w-md relative z-10 w-full">
+      <div className="sm:mx-auto sm:w-full sm:max-w-lg relative z-10 w-full">
         <motion.div
           layout
           initial={{ opacity: 0, y: 15 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.35, ease: 'easeOut' }}
-          className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl p-6 sm:p-10 shadow-2xl"
+          transition={{ duration: 0.3, ease: 'easeOut' }}
+          className="bg-white border border-slate-200 rounded-3xl p-8 sm:p-12 shadow-xl shadow-slate-100"
         >
           {error && (
             <motion.div
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="mb-5 bg-rose-500/10 border border-rose-500/20 rounded-xl p-4 flex items-start gap-3"
+              className="mb-6 bg-red-50 border border-red-200 rounded-xl p-5 flex items-start gap-3.5"
             >
-              <AlertCircle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
-              <div className="text-sm text-rose-200 font-medium">{error}</div>
+              <AlertCircle className="w-5.5 h-5.5 text-red-600 shrink-0 mt-0.5" />
+              <div className="text-base text-red-800 font-semibold">{error}</div>
             </motion.div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-5">
+          <form onSubmit={handleSubmit} className="space-y-6">
             {!isLogin && (
-              <div className="space-y-5">
+              <div className="space-y-6">
                 <div>
-                  <label className="block text-xs uppercase tracking-wider font-semibold text-slate-400 mb-2 font-mono">
+                  <label className="block text-sm uppercase tracking-wider font-bold text-slate-500 mb-2.5">
                     Select Account Type
                   </label>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-2 gap-3">
                     {[
-                      { id: 'seeker', label: 'Job Seeker', desc: 'Find Top Fit Jobs' },
-                      { id: 'employer', label: 'Employer', desc: 'Post Vacancies' }
+                      { id: 'seeker', label: 'Job Seeker', desc: 'Apply & Match Resumes' },
+                      { id: 'employer', label: 'Employer', desc: 'Screen & Post Jobs' }
                     ].map((roleOpt) => (
                       <button
                         key={roleOpt.id}
                         type="button"
                         onClick={() => setSelectedRole(roleOpt.id as any)}
-                        className={`p-3 rounded-2xl border text-center transition-all cursor-pointer ${
+                        className={`p-4 rounded-2xl border text-center transition-all cursor-pointer ${
                           selectedRole === roleOpt.id
-                            ? 'border-cyan-400 bg-cyan-400/10 text-cyan-300 font-extrabold shadow-md shadow-cyan-500/5'
-                            : 'border-white/5 bg-slate-950/20 text-slate-400 hover:border-white/10 hover:text-slate-300'
+                            ? 'border-indigo-600 bg-indigo-50/80 text-indigo-900 font-extrabold shadow-sm'
+                            : 'border-slate-200 bg-slate-50/50 text-slate-600 hover:border-slate-300 hover:text-slate-900'
                         }`}
                       >
-                        <div className="text-[11px] font-black tracking-tight">{roleOpt.label}</div>
-                        <div className="text-[8px] text-slate-500 mt-0.5 leading-tight font-sans text-center">{roleOpt.desc}</div>
+                        <div className="text-sm font-bold tracking-tight">{roleOpt.label}</div>
+                        <div className="text-xs text-slate-500 mt-1 leading-tight font-sans text-center">{roleOpt.desc}</div>
                       </button>
                     ))}
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-xs uppercase tracking-wider font-semibold text-slate-400 mb-1.5">
+                  <label className="block text-sm font-bold text-slate-700 mb-2">
                     Full Name
                   </label>
-                  <div className="relative rounded-md shadow-sm">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <User className="h-5 h-5 text-slate-400" />
+                  <div className="relative rounded-xl shadow-sm">
+                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                      <User className="w-5 h-5 text-slate-400" />
                     </div>
                     <input
                       id="reg-fullname-field"
@@ -139,7 +140,7 @@ export default function AuthInterface({ onAuthSuccess }: AuthInterfaceProps) {
                       required
                       value={fullName}
                       onChange={(e) => setFullName(e.target.value)}
-                      className="block w-full pl-10 pr-3 py-2.5 bg-slate-950/40 border border-white/10 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 text-sm transition-all placeholder:text-slate-500"
+                      className="block w-full pl-11 pr-4 py-3 bg-slate-50/50 border border-slate-200 rounded-xl text-slate-950 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-base transition-all placeholder:text-slate-400 font-medium"
                       placeholder="Alex Mercer"
                     />
                   </div>
@@ -148,32 +149,32 @@ export default function AuthInterface({ onAuthSuccess }: AuthInterfaceProps) {
             )}
 
             <div>
-              <label className="block text-xs uppercase tracking-wider font-semibold text-slate-400 mb-1.5">
+              <label className="block text-sm font-bold text-slate-700 mb-2">
                 Email Address
               </label>
-              <div className="relative rounded-md shadow-sm">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Mail className="h-5 h-5 text-slate-400" />
+              <div className="relative rounded-xl shadow-sm">
+                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                  <Mail className="w-5 h-5 text-slate-400" />
                 </div>
                 <input
                   id="email-field"
-                  type="email"
+                  type="text"
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="block w-full pl-10 pr-3 py-2.5 bg-slate-950/40 border border-white/10 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 text-sm transition-all placeholder:text-slate-500"
-                  placeholder="alex.mercer@example.com"
+                  className="block w-full pl-11 pr-4 py-3 bg-slate-50/50 border border-slate-200 rounded-xl text-slate-950 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-base transition-all placeholder:text-slate-400 font-medium"
+                  placeholder="name@example.com"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-xs uppercase tracking-wider font-semibold text-slate-400 mb-1.5">
+              <label className="block text-sm font-bold text-slate-700 mb-2">
                 Password
               </label>
-              <div className="relative rounded-md shadow-sm">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Lock className="h-5 h-5 text-slate-400" />
+              <div className="relative rounded-xl shadow-sm">
+                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                  <Lock className="w-5 h-5 text-slate-400" />
                 </div>
                 <input
                   id="password-field"
@@ -181,7 +182,7 @@ export default function AuthInterface({ onAuthSuccess }: AuthInterfaceProps) {
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="block w-full pl-10 pr-3 py-2.5 bg-slate-950/40 border border-white/10 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 text-sm transition-all placeholder:text-slate-500"
+                  className="block w-full pl-11 pr-4 py-3 bg-slate-50/50 border border-slate-200 rounded-xl text-slate-950 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-base transition-all placeholder:text-slate-400 font-medium"
                   placeholder="••••••••"
                 />
               </div>
@@ -191,45 +192,45 @@ export default function AuthInterface({ onAuthSuccess }: AuthInterfaceProps) {
               id="auth-submit-btn"
               type="submit"
               disabled={loading}
-              className="w-full flex justify-center items-center py-3 px-4 border border-white/10 rounded-xl shadow-lg shadow-cyan-900/20 text-sm font-bold text-slate-900 bg-cyan-400 hover:bg-cyan-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-cyan-500 hover:scale-[1.01] active:scale-[0.99] transition-all cursor-pointer disabled:opacity-40 disabled:pointer-events-none"
+              className="w-full flex justify-center items-center py-3.5 px-4 rounded-xl shadow-xl shadow-indigo-100 text-base font-bold text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all cursor-pointer disabled:opacity-40 disabled:pointer-events-none"
             >
               {loading ? (
                 <div className="flex items-center gap-2">
-                  <svg className="animate-spin h-5 w-5 text-slate-900" fill="none" viewBox="0 0 24 24">
+                  <svg className="animate-spin h-5 w-5 text-white" fill="none" viewBox="0 0 24 24">
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                   </svg>
                   <span>Syncing Profile...</span>
                 </div>
               ) : (
-                <div className="flex items-center gap-1.5">
-                  {isLogin ? <Sparkles className="w-4 h-4 text-slate-900" /> : <UserPlus className="w-4 h-4 text-slate-900" />}
+                <div className="flex items-center gap-2">
+                  {isLogin ? <Sparkles className="w-5 h-5 text-white" /> : <UserPlus className="w-5 h-5 text-white" />}
                   <span>{isLogin ? 'Sign In to Dashboard' : 'Create & Analyze Profile'}</span>
                 </div>
               )}
             </button>
           </form>
 
-          <div className="mt-8 border-t border-white/5 pt-6">
-            <div className="text-[10px] text-slate-500 text-center uppercase tracking-wider font-bold">
-              Autonomous AI Matchmaker
+          <div className="mt-10 border-t border-slate-100 pt-8">
+            <div className="text-xs text-slate-400 text-center uppercase tracking-wider font-bold">
+              Autonomous AI Matchmaker Suite
             </div>
-            <div className="mt-4 grid grid-cols-2 gap-3 text-xs font-semibold text-slate-400">
-              <div className="flex items-center gap-1.5">
-                <div className="w-1.5 h-1.5 bg-cyan-400 rounded-full" />
+            <div className="mt-5 grid grid-cols-2 gap-4 text-sm font-semibold text-slate-600">
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 bg-indigo-600 rounded-full" />
                 ATS Analysis Feedback
               </div>
-              <div className="flex items-center gap-1.5">
-                <div className="w-1.5 h-1.5 bg-emerald-400 rounded-full" />
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 bg-teal-500 rounded-full" />
                 Real-time Scorecarding
               </div>
-              <div className="flex items-center gap-1.5">
-                <div className="w-1.5 h-1.5 bg-purple-400 rounded-full" />
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 bg-emerald-500 rounded-full" />
                 Tailored Cover Letters
               </div>
-              <div className="flex items-center gap-1.5">
-                <div className="w-1.5 h-1.5 bg-indigo-400 rounded-full" />
-                SaaS Job Integrations
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 bg-blue-500 rounded-full" />
+                Enterprise Integrations
               </div>
             </div>
           </div>

@@ -1,19 +1,30 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Building, Plus, Users, Sparkles, AlertCircle, FileText, CheckCircle2, 
-  Trash2, Award, Zap, ThumbsUp, ThumbsDown, Check, Star, Play 
+  Trash2, Award, Zap, ThumbsUp, ThumbsDown, Check, Star, Play, Download, Send, Edit3, MessageSquare, Briefcase, Eye
 } from 'lucide-react';
 import { Job, User } from '../types';
 
 interface EmployerPortalProps {
   jobs: Job[];
+  user: User;
+  token: string;
   onAddJob: (newJob: Job) => void;
+  onRefreshJobs: () => Promise<void>;
   registeredUsers: User[];
   currentPlan: 'Free' | 'Pro' | 'Enterprise';
 }
 
-export default function EmployerPortal({ jobs = [], onAddJob, registeredUsers = [], currentPlan }: EmployerPortalProps) {
-  const [showRegModal, setShowRegModal] = useState(false);
+export default function EmployerPortal({ 
+  jobs = [], 
+  user, 
+  token, 
+  onAddJob, 
+  onRefreshJobs, 
+  registeredUsers = [], 
+  currentPlan 
+}: EmployerPortalProps) {
+  const [activeTab, setActiveTab] = useState<'applicants' | 'listings' | 'interview_assistant'>('applicants');
   const [companyProfile, setCompanyProfile] = useState({
     name: "Brainy Career Corp",
     logoURL: "",
@@ -24,6 +35,8 @@ export default function EmployerPortal({ jobs = [], onAddJob, registeredUsers = 
     verified: true
   });
 
+  // Form states for creating or editing job listings
+  const [editingJobId, setEditingJobId] = useState<string | null>(null);
   const [newTitle, setNewTitle] = useState('');
   const [newCompany, setNewCompany] = useState(companyProfile.name);
   const [newLocation, setNewLocation] = useState('');
@@ -33,40 +46,8 @@ export default function EmployerPortal({ jobs = [], onAddJob, registeredUsers = 
   const [newReqs, setNewReqs] = useState('');
   const [newTags, setNewTags] = useState('');
 
-  // Local Recruiter Job Listing list
-  const [listings, setListings] = useState<Job[]>([
-    {
-      id: "recruit-1",
-      title: "Senior Full Stack Dev (Node & React)",
-      company: companyProfile.name,
-      logo: "BC",
-      description: "Looking for an expert to design custom API gateways, handle state persistent integrations, and construct high-fidelity UI web screens.",
-      requirements: ["React 18+", "Node.js", "Express", "TypeScript", "PostgreSQL"],
-      responsibilities: ["Develop robust UI layouts", "Optimize server load limits", "Bridge database persistence connectors"],
-      location: "San Francisco, CA",
-      locationModel: "Remote",
-      salaryRange: "$140,000 - $185,000",
-      postedDate: "2026-06-06",
-      tags: ["React", "TypeScript", "Node.js"],
-      originalUrl: "https://www.brainycareer.com/careers"
-    }
-  ]);
-
-  // Simulated List of active applicants for recruitment screening
-  const [applicants, setApplicants] = useState([
-    {
-      id: "app-101",
-      fullName: "Gaurav Upreti",
-      skills: ["React", "TypeScript", "Node.js", "Express", "Supabase", "Git"],
-      atsScore: 92,
-      culturalFit: 88,
-      experienceLevel: "Senior",
-      suitability: "Highly Suitable",
-      strength: "Exceptional modern full-stack engineering proficiency and database design expertise.",
-      gap: "Familiarity with Kubernetes cloud clustering architectures.",
-      status: "SHORTLISTED",
-      resumeFileName: "Upreti_Resume_2026.pdf"
-    },
+  // Local applicants list (with initial fallback/mock seekers, strictly excluding Gaurav!)
+  const [applicants, setApplicants] = useState<any[]>([
     {
       id: "app-102",
       fullName: "Liam Neeson",
@@ -74,11 +55,12 @@ export default function EmployerPortal({ jobs = [], onAddJob, registeredUsers = 
       atsScore: 48,
       culturalFit: 55,
       experienceLevel: "Entry",
-      suitability: "Unfit for Role",
+      suitability: "Needs Training",
       strength: "Strong basic web layout structuring skills.",
       gap: "Missing backend Node, API development, and TypeScript type constraints experience.",
-      status: "FLAGGED_REJECT",
-      resumeFileName: "Liam_Resume_Draft.txt"
+      status: "UNDER_REVIEW",
+      resumeFileName: "Liam_Resume_Draft.txt",
+      resumeText: "LIAM NEESON RESUME\nSkills: React, CSS, HTML, WordPress\nExperience in developing WordPress sites."
     },
     {
       id: "app-103",
@@ -90,282 +72,705 @@ export default function EmployerPortal({ jobs = [], onAddJob, registeredUsers = 
       suitability: "Suitable",
       strength: "Experienced Node runtime backend dev and SQL query optimization strategies.",
       gap: "Modern React state handlers and Tailwind layout styling.",
-      status: "UNDER_REVIEW",
-      resumeFileName: "Emily_CV_2026.docx"
+      status: "SHORTLISTED",
+      resumeFileName: "Emily_CV_2026.docx",
+      resumeText: "EMILY BLUNT\nSenior Node Backend Architect\nAdvanced Postgres query setups, Docker containers"
     }
   ]);
 
-  const [activeTab, setActiveTab] = useState<'listings' | 'applicants' | 'interview_assistant'>('applicants');
-  const [selectedApplicant, setSelectedApplicant] = useState<any>(applicants[0]);
-  const [jobForQuestions, setJobForQuestions] = useState<string>("recruit-1");
+  const [selectedApplicant, setSelectedApplicant] = useState<any>(null);
+  const [jobForQuestions, setJobForQuestions] = useState<string>("");
   const [generatedQuestions, setGeneratedQuestions] = useState<string[]>([
     "Explain your strategy to protect an Express database route against deep connection pools leaks.",
     "Describe a time you solved an infinite re-render loop inside a complex React system.",
     "How would you integrate real-time collaborative state persistence without breaking local caches?"
   ]);
 
-  const triggerAddListing = (e: React.FormEvent) => {
+  // Chat/Messaging system states
+  const [messages, setMessages] = useState<any[]>([]);
+  const [chatInput, setChatInput] = useState('');
+  const [chatJobId, setChatJobId] = useState<string>('');
+  const [isSendingMessage, setIsSendingMessage] = useState(false);
+
+  // Fetch registered seekers from server & fetch chats
+  const fetchDbApplicantsAndChats = async () => {
+    try {
+      // 1. Fetch Candidates (Seekers with resumes)
+      const appRes = await fetch('/api/applicants', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      let registeredSeekers: any[] = [];
+      if (appRes.ok) {
+        const appData = await appRes.json();
+        registeredSeekers = appData.applicants || [];
+      }
+
+      // Format dynamic database seekers to match the list structure
+      const formattedSeekers = registeredSeekers.map((seeker: any) => ({
+        id: seeker.id,
+        fullName: seeker.fullName || seeker.email,
+        skills: seeker.analysis?.parsedSkills || seeker.preferences?.skills || ["React", "TypeScript"],
+        atsScore: seeker.analysis?.overallAtsScore || 85,
+        culturalFit: 85,
+        experienceLevel: seeker.analysis?.recommendedRole?.includes("Senior") ? "Senior" : "Mid",
+        suitability: "Highly Suitable",
+        strength: seeker.analysis?.executiveStrategicSummary || "Strong analytical and software integration talents.",
+        gap: seeker.analysis?.structuralGapsImprovementAreas || "Familiarity with container clustering.",
+        status: seeker.status || "UNDER_REVIEW",
+        resumeFileName: seeker.resumeFileName || "resume.txt",
+        resumeText: seeker.resumeText || ""
+      }));
+
+      // Filter local applicants to remove any potential duplicates by name, and exclude Gaurav
+      const defaultSeekersCleaned = [
+        {
+          id: "app-102",
+          fullName: "Liam Neeson",
+          skills: ["React", "CSS", "HTML", "WordPress"],
+          atsScore: 48,
+          culturalFit: 55,
+          experienceLevel: "Entry",
+          suitability: "Needs Training",
+          strength: "Strong basic web layout structuring skills.",
+          gap: "Missing backend Node, API development, and TypeScript type constraints experience.",
+          status: "UNDER_REVIEW",
+          resumeFileName: "Liam_Resume_Draft.txt",
+          resumeText: "LIAM NEESON RESUME\nSkills: React, CSS, HTML, WordPress"
+        },
+        {
+          id: "app-103",
+          fullName: "Emily Blunt",
+          skills: ["Express", "Node.js", "PostgreSQL", "JavaScript", "Docker"],
+          atsScore: 78,
+          culturalFit: 84,
+          experienceLevel: "Mid",
+          suitability: "Suitable",
+          strength: "Experienced Node runtime backend dev and SQL query optimization.",
+          gap: "Modern React state handlers and Tailwind layout styling.",
+          status: "SHORTLISTED",
+          resumeFileName: "Emily_CV_2026.docx",
+          resumeText: "EMILY BLUNT\nSenior Node Backend Architect\nAdvanced Postgres query setups"
+        }
+      ];
+
+      // Combine database applicants with clean mock ones
+      const combined = [...formattedSeekers];
+      defaultSeekersCleaned.forEach(m => {
+        if (!combined.find(c => c.fullName.toLowerCase() === m.fullName.toLowerCase())) {
+          combined.push(m);
+        }
+      });
+
+      setApplicants(combined);
+      if (combined.length > 0 && !selectedApplicant) {
+        setSelectedApplicant(combined[0]);
+      }
+
+      // 2. Fetch Chat Messages list
+      const msgRes = await fetch('/api/messages', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (msgRes.ok) {
+        const msgData = await msgRes.json();
+        setMessages(msgData.messages || []);
+      }
+    } catch (e) {
+      console.error("Failed to load applicants and communications:", e);
+    }
+  };
+
+  useEffect(() => {
+    fetchDbApplicantsAndChats();
+    // Default chatJobId to the first available job
+    if (jobs.length > 0) {
+      setChatJobId(jobs[0].id);
+      setJobForQuestions(jobs[0].id);
+    }
+  }, [token, jobs.length]);
+
+  // Refetch messages periodically (basic pulling)
+  useEffect(() => {
+    const timer = setInterval(() => {
+      if (activeTab === 'applicants') {
+        const fetchOnlyChats = async () => {
+          try {
+            const msgRes = await fetch('/api/messages', {
+              headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (msgRes.ok) {
+              const msgData = await msgRes.json();
+              setMessages(msgData.messages || []);
+            }
+          } catch (_) {}
+        };
+        fetchOnlyChats();
+      }
+    }, 4000);
+    return () => clearInterval(timer);
+  }, [token, activeTab]);
+
+  // Fetch telemetry to register that the recruiter checked a candidate's details
+  const handleSelectApplicant = async (app: any) => {
+    setSelectedApplicant(app);
+    try {
+      await fetch(`/api/applicants/${app.id}/view`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+    } catch (e) {
+      console.warn("Failed to log candidate view event:", e);
+    }
+  };
+
+  // Update applicant application status
+  const handleUpdateApplicantStatus = async (applicantId: string, newStatus: string) => {
+    try {
+      const response = await fetch(`/api/applicants/${applicantId}/status`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          status: newStatus,
+          jobId: chatJobId || (jobs.length > 0 ? jobs[0].id : '')
+        })
+      });
+
+      if (response.ok) {
+        // Update local applicants state so it reflects immediately
+        setApplicants(prev => prev.map(app => 
+          app.id === applicantId ? { ...app, status: newStatus } : app
+        ));
+        // Update selectedApplicant too
+        setSelectedApplicant(prev => prev && prev.id === applicantId ? { ...prev, status: newStatus } : prev);
+      } else {
+        const err = await response.json();
+        alert("Failed to update applicant state: " + (err.error || "Server issue"));
+      }
+    } catch (e: any) {
+      alert("Error submitting applicant status update: " + e.message);
+    }
+  };
+
+  // Format date readable
+  const formatDate = (dateStr: string) => {
+    try {
+      const d = new Date(dateStr);
+      return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    } catch (_) {
+      return dateStr;
+    }
+  };
+
+  // Submit new job listing or save edit changes
+  const triggerSaveJobListing = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTitle || !newLocation || !newSalary) {
-      alert("Please fill necessary job criteria.");
+      alert("Please specify necessary job requirements: Job Title, Location, and Salary.");
       return;
     }
 
-    const createdJob: Job = {
-      id: `list-${Date.now()}`,
+    const payload = {
       title: newTitle,
-      company: companyProfile.name,
-      logo: companyProfile.name.substring(0, 2).toUpperCase(),
-      description: newDesc || "AI-optimized developer opening.",
-      requirements: newReqs ? newReqs.split(",").map(r => r.trim()) : ["Software Engineering", "Agile Core"],
-      responsibilities: ["Lead engineering milestones", "Develop secure API features"],
+      company: newCompany || companyProfile.name,
       location: newLocation,
       locationModel: newModel,
       salaryRange: newSalary,
-      postedDate: new Date().toISOString().split('T')[0],
-      tags: newTags ? newTags.split(",").map(t => t.trim()) : ["Developer"],
+      description: newDesc || "Excellent development role at our AI tech center.",
+      requirements: newReqs ? newReqs.split(",").map(r => r.trim()) : ["React", "TypeScript", "Node.js"],
+      responsibilities: ["Develop enterprise modules", "Scale internal databases", "Engage in pair reviews"],
+      tags: newTags ? newTags.split(",").map(t => t.trim()) : ["React", "Dev"],
       originalUrl: "https://www.brainycareer.com/careers"
     };
 
-    onAddJob(createdJob);
-    setListings(prev => [createdJob, ...prev]);
-    setActiveTab('listings');
+    try {
+      let response;
+      if (editingJobId) {
+        // Edit Mode
+        response = await fetch(`/api/jobs/${editingJobId}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify(payload)
+        });
+      } else {
+        // Create Mode
+        response = await fetch('/api/jobs', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify(payload)
+        });
+      }
 
-    // Reset fields
-    setNewTitle('');
-    setNewLocation('');
-    setNewSalary('');
-    setNewDesc('');
-    setNewReqs('');
-    setNewTags('');
+      const resData = await response.json();
+      if (!response.ok) {
+        throw new Error(resData.error || 'Failed to sync job with database.');
+      }
+
+      alert(editingJobId ? "Job opening updated successfully!" : "New job listing successfully published to the platform database!");
+      await onRefreshJobs();
+      
+      // Reset State
+      setEditingJobId(null);
+      setNewTitle('');
+      setNewLocation('');
+      setNewSalary('');
+      setNewDesc('');
+      setNewReqs('');
+      setNewTags('');
+      
+    } catch (err: any) {
+      alert(err.message || "An error occurred saving the job details.");
+    }
   };
 
-  const handleApplicantStatus = (id: string, newStats: 'SHORTLISTED' | 'FLAGGED_REJECT') => {
-    setApplicants(prev => 
-      prev.map(app => {
-        if (app.id === id) {
-          const updated = { ...app, status: newStats };
-          if (selectedApplicant?.id === id) {
-            setSelectedApplicant(updated);
-          }
-          return updated;
+  // Load a job into form for editing
+  const handleLoadJobForEditing = (job: Job) => {
+    if (job.status === "Closed") {
+      alert("This job has been marked as Closed. Reopen it to enable details editing.");
+      return;
+    }
+    setEditingJobId(job.id);
+    setNewTitle(job.title);
+    setNewCompany(job.company);
+    setNewLocation(job.location);
+    setNewModel(job.locationModel);
+    setNewSalary(job.salaryRange);
+    setNewDesc(job.description);
+    setNewReqs(job.requirements.join(", "));
+    setNewTags(job.tags.join(", "));
+    // Scroll form into focus or scroll to top
+    window.scrollTo({ top: 150, behavior: 'smooth' });
+  };
+
+  // Toggle Job Open/Closed status directly on backend
+  const handleToggleJobStatus = async (jobId: string, currentStatus: string) => {
+    const nextStatus = currentStatus === 'Closed' ? 'Open' : 'Closed';
+    const confirmToggle = window.confirm(`Are you sure you want to mark this vacancy as "${nextStatus}"?`);
+    if (!confirmToggle) return;
+
+    try {
+      const response = await fetch(`/api/jobs/${jobId}/status`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ status: nextStatus })
+      });
+
+      if (response.ok) {
+        alert(`Vacancy status changed successfully to ${nextStatus}!`);
+        await onRefreshJobs();
+      } else {
+        const errVal = await response.json();
+        alert("Could not update status: " + (errVal.error || "Server issue"));
+      }
+    } catch (e: any) {
+      alert("Error updating status: " + e.message);
+    }
+  };
+
+  // Safe chemical extraction for candidate resume downloading
+  const handleDownloadApplicantResume = async (applicant: any) => {
+    // If mock candidate, download locally synthesized plain file
+    if (applicant.id.startsWith("app-")) {
+      try {
+        const textToSave = applicant.resumeText || `Mock resume file for candidate ${applicant.fullName}. Skills: ${applicant.skills.join(",")}`;
+        const blob = new Blob([textToSave], { type: "text/plain;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = applicant.resumeFileName || `${applicant.fullName.replace(/\s+/g, '_')}_resume.txt`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      } catch (err) {
+        alert("Downloading simulated resume failed.");
+      }
+      return;
+    }
+
+    // Direct database Candidate download calling endpoint
+    try {
+      const res = await fetch(`/api/users/${applicant.id}/resume/download`);
+      if (!res.ok) {
+        throw new Error("Target file missing on backend servers.");
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = applicant.resumeFileName || "candidate_resume.txt";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    } catch (err: any) {
+      alert("Resume Download Error: " + err.message);
+    }
+  };
+
+  // Send Direct Message
+  const handleSendDirectMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!chatInput.trim() || !selectedApplicant) return;
+
+    setIsSendingMessage(true);
+    try {
+      const response = await fetch('/api/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          receiverId: selectedApplicant.id,
+          jobId: chatJobId || 'general',
+          content: chatInput.trim()
+        })
+      });
+
+      if (response.ok) {
+        setChatInput('');
+        // Refetch immediately
+        const msgRes = await fetch('/api/messages', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (msgRes.ok) {
+          const mData = await msgRes.json();
+          setMessages(mData.messages || []);
         }
-        return app;
-      })
-    );
+      } else {
+        const data = await response.json();
+        alert(data.error || "Failed context sending message.");
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsSendingMessage(false);
+    }
   };
 
+  // Generate customized screening questions
   const generateAIQuestions = () => {
-    const selectedJob = listings.find(l => l.id === jobForQuestions) || listings[0];
-    const baseReqs = selectedJob ? selectedJob.requirements : ["React", "TypeScript"];
-    
-    // Simulates an AI structured prompt output
+    const selectedJobObj = jobs.find(l => l.id === jobForQuestions) || jobs[0];
+    if (!selectedJobObj) return;
+
+    const baseReqs = selectedJobObj.requirements || ["React", "TypeScript"];
     setGeneratedQuestions([
-      `Based on requirements for ${selectedJob?.title || 'Engineer'}: Describe your practical experience managing ${baseReqs[0] || 'clean layouts'} in production environments.`,
+      `Based on requirements for ${selectedJobObj.title}: Describe your practical experience managing ${baseReqs[0] || 'clean layouts'} in production environments.`,
       `How do you handle error propagation in asynchronous requests combining ${baseReqs[1] || 'Node API'} integrations?`,
       `Explain your system testing strategies for performance benchmarks before pushing pipelines to Cloud environments.`,
-      "Walk us through your workflow when resolving merge conflicts on critical deployment branches."
+      `Describe how you configured ${baseReqs[2] || 'Tailwind CSS / SQL'} inside a high-volume development project at short notice.`
     ]);
   };
 
+  // Filter messages for current selected seeker thread
+  const filteredChats = selectedApplicant ? messages.filter(
+    (m: any) => (m.senderId === user.id && m.receiverId === selectedApplicant.id) || 
+                 (m.senderId === selectedApplicant.id && m.receiverId === user.id)
+  ) : [];
+
   return (
-    <div id="employer-portal-view" className="space-y-6 font-sans">
+    <div id="employer-portal-view" className="space-y-8 font-sans bg-slate-50 p-6 md:p-8 rounded-3xl border border-slate-200">
       
-      {/* Recruiter Header and Certified status info */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center p-4 bg-slate-900/40 rounded-3xl border border-white/5 gap-4">
+      {/* Recruiter Header Bar */}
+      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center p-6 bg-white rounded-2xl border border-slate-200 gap-6 shadow-sm">
         <div className="flex items-center gap-4">
-          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-purple-500/20 to-cyan-500/20 flex items-center justify-center border border-white/10 text-white font-black text-lg">
+          <div className="w-14 h-14 rounded-xl bg-indigo-600 flex items-center justify-center text-white font-extrabold text-2xl shadow-md shadow-indigo-150">
             {companyProfile.name.substring(0, 2).toUpperCase()}
           </div>
           <div>
-            <div className="flex items-center gap-1.5">
-              <h2 className="text-base font-bold text-white">{companyProfile.name}</h2>
-              {companyProfile.verified && (
-                <span className="text-[9px] uppercase font-extrabold text-emerald-400 bg-emerald-400/10 px-1.5 py-0.2 rounded border border-emerald-500/20 flex items-center gap-0.5">
-                  <Star className="w-2.5 h-2.5 fill-emerald-400" />
-                  Verified Employer
-                </span>
-              )}
+            <div className="flex items-center gap-2">
+              <h2 className="text-xl font-bold text-slate-900">{companyProfile.name}</h2>
+              <span className="text-[10px] uppercase font-extrabold text-indigo-600 bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded-full flex items-center gap-1">
+                <Star className="w-3 h-3 fill-indigo-600 text-indigo-600" />
+                Verified Employer
+              </span>
             </div>
-            <p className="text-[11px] text-slate-400">{companyProfile.hq} • <a href={`http://${companyProfile.website}`} className="text-cyan-400 hover:underline font-mono">{companyProfile.website}</a></p>
+            <p className="text-sm text-slate-500 mt-1">HQ: {companyProfile.hq} • {companyProfile.size} • <a href={`http://${companyProfile.website}`} target="_blank" rel="noreferrer" className="text-indigo-600 font-semibold hover:underline font-mono text-[13px]">{companyProfile.website}</a></p>
           </div>
         </div>
 
-        <div className="flex bg-slate-950/60 p-1 rounded-xl border border-white/5 text-[10px] font-bold">
+        {/* Portlet navigation controls */}
+        <div className="flex flex-wrap bg-slate-100 p-1 rounded-2xl border border-slate-200 text-sm font-bold gap-1">
           <button 
             onClick={() => setActiveTab('applicants')}
-            className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${activeTab === 'applicants' ? 'bg-cyan-500 text-slate-950 font-extrabold' : 'text-slate-400 hover:text-white'}`}
+            className={`px-4.5 py-2 rounded-xl transition-all cursor-pointer ${
+              activeTab === 'applicants' 
+                ? 'bg-white text-indigo-600 shadow-sm font-extrabold' 
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
           >
             AI Candidate Matcher ({applicants.length})
           </button>
+          
           <button 
-            onClick={() => setActiveTab('listings')}
-            className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${activeTab === 'listings' ? 'bg-cyan-500 text-slate-950 font-extrabold' : 'text-slate-400 hover:text-white'}`}
+            onClick={() => {
+              setActiveTab('listings');
+              setEditingJobId(null);
+            }}
+            className={`px-4.5 py-2 rounded-xl transition-all cursor-pointer ${
+              activeTab === 'listings' 
+                ? 'bg-white text-indigo-600 shadow-sm font-extrabold' 
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
           >
             Job Postings Builder
           </button>
+          
           <button 
             onClick={() => setActiveTab('interview_assistant')}
-            className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${activeTab === 'interview_assistant' ? 'bg-cyan-500 text-slate-950 font-extrabold' : 'text-slate-400 hover:text-white'}`}
+            className={`px-4.5 py-2 rounded-xl transition-all cursor-pointer ${
+              activeTab === 'interview_assistant' 
+                ? 'bg-white text-indigo-600 shadow-sm font-extrabold' 
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
           >
-            AI Recruiter Assistant
+            Interview Question Assistant
           </button>
         </div>
       </div>
 
+      {/* 1. APPLICANTS TAB */}
       {activeTab === 'applicants' && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
           
-          {/* Incoming Candidate ranking list */}
-          <div className="lg:col-span-1 border border-white/5 rounded-2xl p-4 bg-slate-900/10 space-y-3.5">
+          {/* Rank list column */}
+          <div className="xl:col-span-1 border border-slate-200 rounded-3xl p-5 bg-white space-y-4 shadow-sm">
             <div>
-              <h3 className="text-xs font-black text-white uppercase tracking-wider">Candidate Ranker & Screening</h3>
-              <p className="text-[10px] text-slate-400 mt-0.5">AI automatically screens and ranks applicants by skill-coverage, fit %, and professional score.</p>
+              <h3 className="text-base font-bold text-slate-950 uppercase tracking-wider">Candidate Ranker Queue</h3>
+              <p className="text-xs text-slate-500 mt-1 leading-relaxed">Dynamic applicants screen. Real-time ATS analytics & uploaded profiles indexed below.</p>
             </div>
 
-            <div className="space-y-2">
-              {applicants.map(app => {
-                const isSelected = selectedApplicant?.id === app.id;
-                return (
-                  <div
-                    key={app.id}
-                    onClick={() => setSelectedApplicant(app)}
-                    className={`p-3.5 rounded-xl border cursor-pointer transition-all duration-200 ${
-                      isSelected 
-                        ? 'border-cyan-400 bg-cyan-950/20 shadow-[0_0_15px_rgba(34,211,238,0.05)]' 
-                        : 'border-white/5 bg-slate-950/40 hover:border-white/10'
-                    }`}
-                  >
-                    <div className="flex justify-between items-start gap-1">
-                      <div>
-                        <span className="text-xs font-bold text-white block leading-tight">{app.fullName}</span>
-                        <span className="text-[10.5px] text-slate-400 font-mono mt-1">{app.experienceLevel} Candidate</span>
+            <div className="space-y-3 max-h-[600px] overflow-y-auto pr-1">
+              {applicants.length === 0 ? (
+                <div className="text-center py-12 text-slate-400 text-sm font-medium">No candidate has uploaded profile resumes yet.</div>
+              ) : (
+                applicants.map(app => {
+                  const isSelected = selectedApplicant?.id === app.id;
+                  return (
+                    <div
+                      key={app.id}
+                      onClick={() => handleSelectApplicant(app)}
+                      className={`p-4 rounded-xl border cursor-pointer transition-all duration-200 ${
+                        isSelected 
+                          ? 'border-indigo-600 bg-indigo-50/50 shadow-md' 
+                          : 'border-slate-200 bg-white hover:border-slate-350 hover:bg-slate-50/30'
+                      }`}
+                    >
+                      <div className="flex justify-between items-start gap-2">
+                        <div>
+                          <span className="text-sm font-bold text-slate-900 block leading-tight">{app.fullName}</span>
+                          <span className="text-xs text-slate-500 font-semibold block mt-1.5">{app.experienceLevel} Developer</span>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-base font-extrabold text-indigo-700 block tracking-tight">{app.atsScore}% FIT</span>
+                          <span className="text-[9px] uppercase font-bold text-slate-400 tracking-widest font-mono">ATS INDEX</span>
+                        </div>
                       </div>
-                      <div className="text-right">
-                        <span className="text-xs font-black text-cyan-400 block font-mono">{app.atsScore}% FIT</span>
-                        <span className="text-[8px] uppercase font-bold text-slate-500 tracking-wider">ATS MATCH</span>
-                      </div>
-                    </div>
 
-                    <div className="flex flex-wrap gap-1 mt-2">
-                      {app.skills.slice(0, 3).map((sk, idx) => (
-                        <span key={idx} className="bg-white/5 text-[9px] text-slate-300 px-1.5 py-0.2 rounded leading-none">
-                          {sk}
+                      <div className="flex flex-wrap gap-1 md:gap-1.5 mt-3">
+                        {app.skills.slice(0, 4).map((sk: string, idx: number) => (
+                          <span key={idx} className="bg-slate-100 text-slate-700 text-[10px] uppercase font-bold px-2 py-0.5 rounded">
+                            {sk}
+                          </span>
+                        ))}
+                        {app.skills.length > 4 && (
+                          <span className="text-[10px] text-slate-400 font-bold self-center leading-none">+{app.skills.length - 4}</span>
+                        )}
+                      </div>
+
+                      <div className="flex justify-between items-center text-[11px] pt-3 border-t border-slate-100 mt-3 font-medium">
+                        <span className="text-slate-500 truncate max-w-[120px] font-mono">{app.resumeFileName}</span>
+                        <span className="font-bold text-indigo-600 uppercase text-[10px] tracking-wider bg-indigo-50 px-2 py-0.5 rounded">
+                          {app.status}
                         </span>
-                      ))}
-                      {app.skills.length > 3 && (
-                        <span className="text-[9px] text-slate-500 font-mono">+{app.skills.length - 3}</span>
-                      )}
+                      </div>
                     </div>
-
-                    <div className="flex justify-between items-center text-[10px] pt-2 border-t border-white/5 mt-2.5 font-mono">
-                      <span className="text-slate-500">Docs: {app.resumeFileName}</span>
-                      <span className={`font-bold ${
-                        app.status === 'SHORTLISTED' ? 'text-emerald-400' :
-                        app.status === 'FLAGGED_REJECT' ? 'text-rose-400' :
-                        'text-indigo-400'
-                      }`}>
-                        {app.status}
-                      </span>
-                    </div>
-                  </div>
-                );
-              })}
+                  );
+                })
+              )}
             </div>
           </div>
 
-          {/* Screening candidate details overview */}
-          <div className="lg:col-span-2 border border-white/5 rounded-2xl p-5 bg-slate-900/10 space-y-5">
+          {/* Right Detailed Panel showing Applicant Info & Chat Thread */}
+          <div className="xl:col-span-2 space-y-6">
             {selectedApplicant ? (
-              <div className="space-y-5">
+              <div className="space-y-6 bg-white border border-slate-200 p-6 md:p-8 rounded-3xl shadow-sm">
                 
-                {/* Score indicators */}
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center p-4 bg-slate-950/40 border border-white/5 rounded-2xl gap-4">
+                {/* Visual Recruiter Status Controller */}
+                <div className="p-4 bg-indigo-50/50 rounded-2xl border border-indigo-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                  <div className="space-y-0.5">
+                    <span className="text-[10px] font-black uppercase text-indigo-700 font-mono tracking-widest block">Recruiter Status Panel</span>
+                    <p className="text-xs text-slate-600 font-semibold leading-none">Modify application tracking state & emit real-time push notification</p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {[
+                      { id: 'UNDER_REVIEW', label: 'Under Review' },
+                      { id: 'SHORTLISTED', label: 'Shortlist' },
+                      { id: 'Interview Scheduled', label: 'Invite Interview' },
+                      { id: 'Offer Received', label: 'Extend Offer' }
+                    ].map(statusBtn => {
+                      const isActive = selectedApplicant.status === statusBtn.id;
+                      return (
+                        <button
+                          key={statusBtn.id}
+                          onClick={() => handleUpdateApplicantStatus(selectedApplicant.id, statusBtn.id)}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer transition-all ${
+                            isActive 
+                              ? 'bg-indigo-600 text-white shadow-sm ring-2 ring-indigo-300' 
+                              : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'
+                          }`}
+                        >
+                          {statusBtn.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Score Header Indicators */}
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center p-5 bg-slate-50 border border-slate-100 rounded-2xl gap-4">
                   <div>
-                    <span className="text-xs uppercase font-extrabold text-indigo-400 tracking-widest font-mono">CANDIDATE SUITABILITY AUDIT</span>
-                    <h3 className="text-lg font-black text-white">{selectedApplicant.fullName}</h3>
-                    <p className="text-xs text-slate-400">Reviewing application documents: <span className="underline text-indigo-300 pointer-events-none">{selectedApplicant.resumeFileName}</span></p>
+                    <span className="text-xs font-bold uppercase tracking-widest text-indigo-600 font-mono">ATS QUALIFICATION SUMMARY</span>
+                    <h3 className="text-xl font-bold text-slate-900 mt-1">{selectedApplicant.fullName}</h3>
+                    <p className="text-xs text-slate-500 mt-1 flex items-center gap-1.5 font-mono">
+                      <FileText className="w-3.5 h-3.5" />
+                      Document type: <span className="font-semibold text-slate-800 underline">{selectedApplicant.resumeFileName}</span>
+                    </p>
                   </div>
                   
-                  <div className="flex gap-4">
-                    <div className="text-center p-2 px-3.5 bg-cyan-950/20 border border-cyan-500/20 rounded-xl">
-                      <span className="text-[10px] font-bold uppercase text-slate-400 font-mono tracking-wider">ATS Alignment</span>
-                      <span className="text-xl font-black text-cyan-400 block tracking-tight">{selectedApplicant.atsScore}%</span>
-                    </div>
-                    <div className="text-center p-2 px-3.5 bg-purple-950/20 border border-purple-500/20 rounded-xl">
-                      <span className="text-[10px] font-bold uppercase text-slate-400 font-mono tracking-wider">Cultural Fit</span>
-                      <span className="text-xl font-black text-purple-400 block tracking-tight">{selectedApplicant.culturalFit}%</span>
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => handleDownloadApplicantResume(selectedApplicant)}
+                      className="flex items-center gap-1.5 px-4 py-2.5 bg-indigo-50 text-indigo-600 border border-indigo-100 rounded-xl text-xs font-bold hover:bg-indigo-100/70 transition-all cursor-pointer shadow-sm"
+                    >
+                      <Download className="w-4 h-4 text-indigo-600" />
+                      Download Resume
+                    </button>
+                    <div className="text-center p-2 px-4 bg-indigo-600 text-white rounded-xl shadow-md">
+                      <span className="text-[9px] font-extrabold uppercase text-indigo-200 block font-mono tracking-wider">FIT Score</span>
+                      <span className="text-lg font-black block leading-none mt-0.5">{selectedApplicant.atsScore}%</span>
                     </div>
                   </div>
                 </div>
 
-                {/* Suitability flags */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="bg-slate-950/40 p-4 rounded-xl border border-white/5 space-y-1.5">
-                    <span className="text-[9px] uppercase font-bold text-slate-400 tracking-wider font-mono">AI Recommended Profile Strength</span>
-                    <p className="text-[11.5px] text-slate-200 leading-normal">{selectedApplicant.strength}</p>
+                {/* Score details grids */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="p-4 rounded-xl bg-emerald-50/55 border border-emerald-100 space-y-1">
+                    <div className="text-emerald-800 font-bold text-[13px] flex items-center gap-1 px-1 py-0.5">
+                      <ThumbsUp className="w-4 h-4 text-emerald-600" />
+                      Key Core Competency Strengths
+                    </div>
+                    <p className="text-sm text-slate-700 leading-relaxed font-medium">{selectedApplicant.strength}</p>
                   </div>
-                  <div className="bg-slate-950/40 p-4 rounded-xl border border-white/5 space-y-1.5">
-                    <span className="text-[9px] uppercase font-bold text-slate-400 tracking-wider font-mono">AI Identified Skill Gaps</span>
-                    <p className="text-[11.5px] text-slate-200 leading-normal">{selectedApplicant.gap}</p>
+
+                  <div className="p-4 rounded-xl bg-amber-50/55 border border-amber-100 space-y-1">
+                    <div className="text-amber-800 font-bold text-[13px] flex items-center gap-1 px-1 py-0.5">
+                      <ThumbsDown className="w-4 h-4 text-amber-600" />
+                      Development & Strategic Gaps
+                    </div>
+                    <p className="text-sm text-slate-700 leading-relaxed font-medium">{selectedApplicant.gap}</p>
                   </div>
                 </div>
 
-                {/* Candidate Skill Coverage tags list */}
-                <div>
-                  <h4 className="text-[10px] uppercase font-black text-slate-400 tracking-wider">Candidate Skills Coverage Checklist</h4>
-                  <div className="flex flex-wrap gap-1.5 mt-2">
-                    {selectedApplicant.skills.map((sk: string, index: number) => (
-                      <span key={index} className="bg-cyan-500/5 text-cyan-300 border border-cyan-500/10 text-[10.5px] font-mono px-2.5 py-0.5 rounded-lg flex items-center gap-1">
-                        <Check className="w-3.5 h-3.5 text-cyan-400 font-bold" />
-                        {sk}
+                {/* Candidate detailed attributes */}
+                <div className="space-y-2">
+                  <h4 className="text-xs uppercase tracking-widest font-black text-slate-400 font-mono">Skills Indexed</h4>
+                  <div className="flex flex-wrap gap-1.5 pt-1">
+                    {selectedApplicant.skills.map((st: string, i: number) => (
+                      <span key={i} className="bg-slate-50 text-slate-700 border border-slate-200 text-xs px-2.5 py-1 rounded-lg font-semibold tracking-tight">
+                        {st}
                       </span>
                     ))}
                   </div>
                 </div>
 
-                {/* Trigger actions */}
-                <div className="flex justify-between items-center pt-4 border-t border-white/5 text-xs font-bold">
-                  <div>
-                    <span className="text-slate-500 mr-2">Status Audit:</span>
-                    <span className={`px-2.5 py-1 rounded font-mono uppercase text-[10px] border ${
-                      selectedApplicant.status === 'SHORTLISTED' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
-                      selectedApplicant.status === 'FLAGGED_REJECT' ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' :
-                      'bg-indigo-505/10 text-indigo-400 border-indigo-500/20'
-                    }`}>
-                      {selectedApplicant.status}
-                    </span>
+                {/* FULL-STACK DIRECT CHAT WORKSPACE */}
+                <div className="border-t border-slate-100 pt-6 space-y-4">
+                  <div className="flex justify-between items-center bg-slate-50 border border-slate-205 p-3 px-4.5 rounded-xl">
+                    <div className="flex items-center gap-2">
+                      <MessageSquare className="w-5 h-5 text-indigo-600" />
+                      <h4 className="text-sm font-bold text-slate-800">Recruiter Chat Context & Messaging</h4>
+                    </div>
+                    
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-semibold text-slate-500 font-mono">Starting Job:</span>
+                      <select 
+                        value={chatJobId}
+                        onChange={(e) => setChatJobId(e.target.value)}
+                        className="bg-white border border-slate-300 rounded px-2 py-1 text-xs text-slate-800 focus:ring-1 focus:ring-indigo-500 outline-none font-semibold cursor-pointer max-w-[200px]"
+                      >
+                        {jobs.map(j => (
+                          <option key={j.id} value={j.id}>{j.title} ({j.company})</option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
 
-                  <div className="flex gap-2">
-                    <button 
-                      onClick={() => handleApplicantStatus(selectedApplicant.id, 'FLAGGED_REJECT')}
-                      disabled={selectedApplicant.status === 'FLAGGED_REJECT'}
-                      className={`px-3.5 py-2 font-bold text-rose-400 rounded-xl border border-rose-500/10 flex items-center gap-1 hover:bg-rose-500/10 transition-all cursor-pointer ${
-                        selectedApplicant.status === 'FLAGGED_REJECT' ? 'opacity-50 cursor-default hover:bg-transparent' : ''
-                      }`}
-                    >
-                      <ThumbsDown className="w-3.5 h-3.5" />
-                      Reject Applicant
-                    </button>
-                    <button 
-                      onClick={() => handleApplicantStatus(selectedApplicant.id, 'SHORTLISTED')}
-                      disabled={selectedApplicant.status === 'SHORTLISTED'}
-                      className={`px-3.5 py-2 font-bold text-slate-950 bg-cyan-400 rounded-xl flex items-center gap-1 hover:bg-cyan-300 transition-all cursor-pointer ${
-                        selectedApplicant.status === 'SHORTLISTED' ? 'opacity-50 cursor-default hover:bg-cyan-400' : ''
-                      }`}
-                    >
-                      <ThumbsUp className="w-3.5 h-3.5 fill-slate-950" />
-                      Shortlist Candidate
-                    </button>
+                  {/* Messaging logs board */}
+                  <div className="h-60 bg-slate-50 border border-slate-200 rounded-2xl p-4.5 overflow-y-auto space-y-3 shadow-inner">
+                    {filteredChats.length === 0 ? (
+                      <div className="text-center py-16 text-slate-400 text-sm font-medium">
+                        No dialogue initiated yet. Initiate contact by sending a welcome inquiry message regarding the selected position.
+                      </div>
+                    ) : (
+                      filteredChats.map((msg: any) => {
+                        const isMe = msg.senderId === user.id;
+                        const relatedJob = jobs.find(jb => jb.id === msg.jobId);
+                        return (
+                          <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
+                            <div className={`max-w-[80%] rounded-2xl p-3.5 ${
+                              isMe ? 'bg-indigo-650 text-white rounded-tr-none' : 'bg-white border border-slate-200 text-slate-800 rounded-tl-none shadow-sm'
+                            }`}>
+                              <p className="text-sm leading-relaxed font-medium">{msg.content}</p>
+                              <div className="flex justify-between items-center gap-4 mt-1.5 pt-1.5 border-t border-current/10 text-[10px] opacity-75 font-mono">
+                                <span>{isMe ? 'Employer (You)' : selectedApplicant.fullName}</span>
+                                <span>
+                                  {relatedJob ? `via ${relatedJob.title}` : 'Inquiry'}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
                   </div>
+
+                  {/* Chat submission bar */}
+                  <form onSubmit={handleSendDirectMessage} className="flex gap-2">
+                    <input
+                      type="text"
+                      value={chatInput}
+                      onChange={(e) => setChatInput(e.target.value)}
+                      required
+                      placeholder={`Send direct response to ${selectedApplicant.fullName} regarding the selected vacancy...`}
+                      className="flex-1 bg-slate-50 border border-slate-200 pl-4 pr-3 py-3 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-600 text-slate-900 font-medium placeholder:text-slate-400"
+                    />
+                    <button
+                      type="submit"
+                      disabled={isSendingMessage || !chatInput.trim()}
+                      className="px-5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1 disabled:opacity-40"
+                    >
+                      <Send className="w-3.5 h-3.5" />
+                      Send
+                    </button>
+                  </form>
                 </div>
 
               </div>
             ) : (
-              <div className="text-center py-16 text-slate-500 flex flex-col items-center justify-center space-y-2">
-                <AlertCircle className="w-8 h-8 text-slate-600 animate-bounce" />
-                <span className="text-xs">No active applicant selected. Click on a candidate card on the left panel to trigger screening checks.</span>
+              <div className="h-96 border border-slate-250 border-dashed rounded-3xl flex flex-col items-center justify-center text-slate-400 text-sm font-medium">
+                Please select a candidate from the ranking list queue on left to view ATS analytics scorecard.
               </div>
             )}
           </div>
@@ -373,202 +778,257 @@ export default function EmployerPortal({ jobs = [], onAddJob, registeredUsers = 
         </div>
       )}
 
+      {/* 2. JOB POSTINGS BUILDER TAB */}
       {activeTab === 'listings' && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="space-y-8">
           
-          {/* Job builder creation form */}
-          <div className="lg:col-span-1 border border-white/5 rounded-2xl p-5 bg-slate-900/10 h-fit space-y-4">
-            <div>
-              <h3 className="text-xs font-black text-white uppercase tracking-wider">Publish Open Vacancy</h3>
-              <p className="text-[10px] text-slate-400 mt-0.5">Define your target prerequisites to let the AI screen inbound applicants.</p>
-            </div>
-
-            <form onSubmit={triggerAddListing} className="space-y-3">
-              <div className="space-y-1">
-                <label className="text-[9.5px] uppercase font-bold text-slate-400 tracking-wider">Job Vacancy Title</label>
-                <input 
-                  type="text" 
-                  value={newTitle} 
-                  onChange={e => setNewTitle(e.target.value)}
-                  placeholder="e.g. Senior AI Research Engineer"
-                  className="w-full bg-slate-950 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-cyan-400 transition-all" 
-                />
+          <div className="grid grid-cols-1 lg:grid-cols-5 gap-8 items-start">
+            
+            {/* Left posting builder workspace */}
+            <div className="lg:col-span-2 border border-slate-200 bg-white p-6 rounded-3xl space-y-6 shadow-sm">
+              <div>
+                <h3 className="text-base font-bold text-slate-950 uppercase tracking-wider flex items-center gap-1.5">
+                  <Edit3 className="w-5 h-5 text-indigo-600" />
+                  {editingJobId ? "Edit Open Vacancy Opening" : "Publish Dynamic Job Opening"}
+                </h3>
+                <p className="text-xs text-slate-500 mt-1">Publish vacancies straight into the platform database engine instantly.</p>
               </div>
 
-              <div className="grid grid-cols-2 gap-2">
-                <div className="space-y-1">
-                  <label className="text-[9.5px] uppercase font-bold text-slate-400 tracking-wider">Location City</label>
-                  <input 
-                    type="text" 
-                    value={newLocation} 
-                    onChange={e => setNewLocation(e.target.value)}
-                    placeholder="e.g. San Jose, CA"
-                    className="w-full bg-slate-950 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-cyan-400 transition-all" 
+              <form onSubmit={triggerSaveJobListing} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 mb-1.5">Job Title</label>
+                  <input
+                    type="text"
+                    required
+                    value={newTitle}
+                    onChange={(e) => setNewTitle(e.target.value)}
+                    placeholder="e.g., Senior Full Stack Engineer (React & Go)"
+                    className="w-full bg-slate-50 border border-slate-200 px-3.5 py-2.5 rounded-xl text-sm focus:ring-2 focus:ring-indigo-600 outline-none text-slate-900 font-semibold"
                   />
                 </div>
-                <div className="space-y-1">
-                  <label className="text-[9.5px] uppercase font-bold text-slate-400 tracking-wider">Salary Range Offering</label>
-                  <input 
-                    type="text" 
-                    value={newSalary} 
-                    onChange={e => setNewSalary(e.target.value)}
-                    placeholder="e.g. $130,000 - $160,000"
-                    className="w-full bg-slate-950 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-cyan-400 transition-all" 
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 mb-1.5">Salary Scale Range</label>
+                    <input
+                      type="text"
+                      required
+                      value={newSalary}
+                      onChange={(e) => setNewSalary(e.target.value)}
+                      placeholder="e.g., $135,000 - $160,000"
+                      className="w-full bg-slate-50 border border-slate-200 px-3.5 py-2.5 rounded-xl text-sm focus:ring-2 focus:ring-indigo-600 outline-none text-slate-900 font-semibold"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 mb-1.5">Location</label>
+                    <input
+                      type="text"
+                      required
+                      value={newLocation}
+                      onChange={(e) => setNewLocation(e.target.value)}
+                      placeholder="e.g., Boston, MA"
+                      className="w-full bg-slate-50 border border-slate-200 px-3.5 py-2.5 rounded-xl text-sm focus:ring-2 focus:ring-indigo-600 outline-none text-slate-900 font-semibold"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 mb-1.5">Workplace Model</label>
+                    <select
+                      value={newModel}
+                      onChange={(e: any) => setNewModel(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 px-3 py-2.5 rounded-xl text-sm focus:ring-2 focus:ring-indigo-600 outline-none text-slate-900 font-bold cursor-pointer"
+                    >
+                      <option value="Remote">Remote</option>
+                      <option value="Hybrid">Hybrid</option>
+                      <option value="Onsite">Onsite</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 mb-1.5">Company Identifier</label>
+                    <input
+                      type="text"
+                      value={newCompany}
+                      disabled
+                      className="w-full bg-slate-100 border border-slate-200 px-3.5 py-2.5 rounded-xl text-sm text-slate-500 font-semibold"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 mb-1.5">Key Matchmaking Skills Tags (comma-separated)</label>
+                  <input
+                    type="text"
+                    value={newReqs}
+                    onChange={(e) => setNewReqs(e.target.value)}
+                    placeholder="React, TypeScript, Redux, PostgreSQL"
+                    className="w-full bg-slate-50 border border-slate-200 px-3.5 py-2.5 rounded-xl text-sm focus:ring-2 focus:ring-indigo-600 outline-none text-slate-900 font-semibold"
                   />
                 </div>
-              </div>
 
-              <div className="space-y-1">
-                <label className="text-[9.5px] uppercase font-bold text-slate-400 tracking-wider">Location Model</label>
-                <select 
-                  value={newModel} 
-                  onChange={e => setNewModel(e.target.value as any)}
-                  className="w-full bg-slate-950 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-cyan-400 transition-all cursor-pointer"
-                >
-                  <option value="Remote">Remote</option>
-                  <option value="Hybrid">Hybrid</option>
-                  <option value="Onsite">Onsite</option>
-                </select>
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-[9.5px] uppercase font-bold text-slate-400 tracking-wider">Role Requirements (Comma separated)</label>
-                <input 
-                  type="text" 
-                  value={newReqs} 
-                  onChange={e => setNewReqs(e.target.value)}
-                  placeholder="React 19, TypeScript, Express, database design"
-                  className="w-full bg-slate-950 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-cyan-400 transition-all" 
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-[9.5px] uppercase font-bold text-slate-400 tracking-wider">Job Description Outline</label>
-                <textarea 
-                  value={newDesc} 
-                  onChange={e => setNewDesc(e.target.value)}
-                  rows={3}
-                  placeholder="Provide immediate duties, team structures, and performance benchmarks for potential hires..."
-                  className="w-full bg-slate-950 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-cyan-400 transition-all resize-none" 
-                />
-              </div>
-
-              <button 
-                type="submit"
-                className="w-full bg-cyan-400 text-slate-950 text-xs font-black py-2.5 rounded-xl hover:bg-cyan-300 transition-all cursor-pointer flex items-center justify-center gap-1 mt-2.5"
-              >
-                <Plus className="w-4 h-4 text-slate-950 font-bold" />
-                Publish to Global Board
-              </button>
-            </form>
-          </div>
-
-          {/* Active Job Posting overview lists */}
-          <div className="lg:col-span-2 border border-white/5 rounded-2xl p-5 bg-slate-900/10 space-y-4">
-            <div>
-              <h3 className="text-xs font-black text-white uppercase tracking-wider">Active Published Vacancies ({listings.length})</h3>
-              <p className="text-[10px] text-slate-400 mt-0.5">Review active listed vacancies published globally.</p>
-            </div>
-
-            <div className="space-y-3">
-              {listings.map(lst => (
-                <div key={lst.id} className="p-4 rounded-xl border border-white/5 bg-slate-950/40 space-y-2.5">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <h4 className="text-xs font-bold text-white leading-snug">{lst.title}</h4>
-                      <p className="text-[10px] text-slate-400 font-mono mt-0.5">{lst.company} • {lst.location} ({lst.locationModel})</p>
-                    </div>
-                    <span className="text-xs font-black text-emerald-400 font-mono bg-emerald-400/5 px-2 py-0.5 rounded border border-emerald-500/10">
-                      {lst.salaryRange}
-                    </span>
-                  </div>
-
-                  <p className="text-[11px] text-slate-300 leading-relaxed line-clamp-2 italic">&ldquo;{lst.description}&rdquo;</p>
-                  
-                  <div className="flex flex-wrap gap-1">
-                    {lst.requirements.map((req, i) => (
-                      <span key={i} className="bg-white/5 text-[9px] text-slate-300 px-2 py-0.5 rounded">
-                        {req}
-                      </span>
-                    ))}
-                  </div>
-
-                  <div className="flex justify-between items-center text-[9px] text-slate-500 font-mono pt-2 border-t border-white/5">
-                    <span>Published On: {lst.postedDate}</span>
-                    <span>Direct Apply Route: Verified Corp Link</span>
-                  </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 mb-1.5">Brief Role Description</label>
+                  <textarea
+                    rows={4}
+                    value={newDesc}
+                    onChange={(e) => setNewDesc(e.target.value)}
+                    placeholder="Describe core duties and expectations of target candidates here..."
+                    className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl text-sm focus:ring-2 focus:ring-indigo-600 outline-none text-slate-900 font-medium resize-none shadow-inner"
+                  />
                 </div>
-              ))}
+
+                <div className="flex gap-2.5 pt-2">
+                  <button
+                    id="save-job-submit-btn"
+                    type="submit"
+                    className="flex-1 py-3 bg-indigo-650 hover:bg-indigo-700 text-white font-bold rounded-xl text-sm transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-indigo-100 shadow-md"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>{editingJobId ? "Save Job Edits" : "Publish to Database"}</span>
+                  </button>
+
+                  {editingJobId && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingJobId(null);
+                        setNewTitle('');
+                        setNewLocation('');
+                        setNewSalary('');
+                        setNewDesc('');
+                        setNewReqs('');
+                      }}
+                      className="px-4 border border-slate-200 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl text-sm transition-all cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                  )}
+                </div>
+              </form>
             </div>
+
+            {/* Right table displaying all posted positions with edits controls & lock */}
+            <div className="lg:col-span-3 border border-slate-200 bg-white p-6 rounded-3xl space-y-6 shadow-sm">
+              <div>
+                <h3 className="text-base font-bold text-slate-950 uppercase tracking-wider flex items-center gap-1">
+                  <Briefcase className="w-5 h-5 text-indigo-600" />
+                  Active Posted Vacancy Board
+                </h3>
+                <p className="text-xs text-slate-500 mt-1 leading-relaxed">Ensure posted openings are optimized. Open jobs can be updated anytime; once marked "Closed", editing is securely locked.</p>
+              </div>
+
+              <div className="space-y-4 max-h-[580px] overflow-y-auto pr-1">
+                {jobs.length === 0 ? (
+                  <div className="text-center py-24 text-slate-400 text-sm font-medium">No posted listings in this database registry yet. Write one on the left panel!</div>
+                ) : (
+                  jobs.map(jb => {
+                    const isClosed = jb.status === 'Closed';
+                    return (
+                      <div key={jb.id} className="p-4 bg-slate-50 border border-slate-200 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 hover:border-slate-350 transition-all">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-sm font-bold text-slate-900">{jb.title}</span>
+                            <span className={`text-[10px] uppercase font-black px-2 py-0.5 rounded ${
+                              isClosed ? 'bg-slate-200 text-slate-650' : 'bg-emerald-50 text-emerald-700 border border-emerald-100'
+                            }`}>
+                              {jb.status || 'Open'}
+                            </span>
+                          </div>
+                          
+                          <p className="text-xs text-slate-600 font-semibold">{jb.company} • <span className="font-mono">{jb.location} ({jb.locationModel})</span></p>
+                          <div className="flex items-center gap-2 mt-2 flex-wrap">
+                            <span className="bg-white border border-slate-200 text-[11px] font-bold text-indigo-600 py-0.5 px-2.5 rounded-lg">{jb.salaryRange}</span>
+                            <span className="text-[10px] text-slate-400 font-medium">Posted {formatDate(jb.postedDate)}</span>
+                          </div>
+                        </div>
+
+                        {/* Edit job / Close job buttons */}
+                        <div className="flex items-center gap-2 w-full sm:w-auto">
+                          {!isClosed ? (
+                            <>
+                              <button
+                                onClick={() => handleLoadJobForEditing(jb)}
+                                className="flex-1 sm:flex-none flex items-center justify-center gap-1 px-3 py-2 border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 text-xs font-bold rounded-xl transition-all cursor-pointer"
+                              >
+                                <Edit3 className="w-3.5 h-3.5 text-slate-600" />
+                                Edit Title/Desc
+                              </button>
+                              
+                              <button
+                                onClick={() => handleToggleJobStatus(jb.id, 'Open')}
+                                className="flex-1 sm:flex-none flex items-center justify-center gap-1 px-3 py-2 bg-red-50 hover:bg-red-100 text-red-600 text-xs font-bold rounded-xl border border-red-100 transition-all cursor-pointer"
+                              >
+                                Close Posting
+                              </button>
+                            </>
+                          ) : (
+                            <div className="flex items-center gap-2 w-full sm:w-auto">
+                              <span className="text-xs text-slate-400 font-bold bg-slate-100 px-3 py-2 rounded-xl border border-slate-200 block w-full text-center sm:w-auto">🔒 Posting Closed</span>
+                              <button
+                                onClick={() => handleToggleJobStatus(jb.id, 'Closed')}
+                                className="flex-1 sm:flex-none flex items-center justify-center gap-1 px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-bold rounded-xl border border-emerald-100 transition-all cursor-pointer"
+                              >
+                                Reopen
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+
           </div>
 
         </div>
       )}
 
+      {/* 3. AI RECRUITER ASSISTANT TAB */}
       {activeTab === 'interview_assistant' && (
-        <div className="border border-white/5 bg-slate-900/10 rounded-2xl p-5 space-y-5">
-          <div className="flex justify-between items-center border-b border-white/5 pb-4">
-            <div>
-              <span className="text-[10px] uppercase font-bold text-cyan-400 tracking-wider font-mono">
-                AI RECRUITER ASSISTANT
-              </span>
-              <h3 className="text-sm font-black text-white">Automated Candidate Question Generators</h3>
-              <p className="text-xs text-slate-400">Generate targeted interview pre-screens and custom evaluation checklists.</p>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] text-slate-400 font-bold font-mono">Target Job:</span>
-              <select 
-                value={jobForQuestions}
-                onChange={e => setJobForQuestions(e.target.value)}
-                className="bg-slate-950 border border-white/10 rounded-lg px-2.5 py-1 text-[11px] text-white focus:outline-none focus:border-cyan-400 cursor-pointer"
-              >
-                {listings.map(lst => (
-                  <option key={lst.id} value={lst.id}>{lst.title}</option>
-                ))}
-              </select>
-            </div>
+        <div className="border border-slate-200 bg-white p-6 md:p-8 rounded-3xl space-y-6 shadow-sm">
+          <div>
+            <h3 className="text-base font-bold text-slate-950 uppercase tracking-widest flex items-center gap-2 font-mono">
+              <Sparkles className="w-5 h-5 text-indigo-600" />
+              AI Recruiter Screening Assistant
+            </h3>
+            <p className="text-xs text-slate-500 mt-1">Select an active posted vacancy to formulate elite, AI-scoring interview screening question tracks instantly.</p>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            
-            <div className="lg:col-span-1 space-y-4">
-              <div className="bg-slate-950/60 p-4 rounded-xl border border-white/5 space-y-3">
-                <h4 className="text-xs font-bold text-white flex items-center gap-1.5 leading-none">
-                  <Zap className="w-4 h-4 text-cyan-400 animate-pulse" />
-                  <span>Configure Questionnaire</span>
-                </h4>
-                <p className="text-[10px] text-slate-400 leading-relaxed">AI analyzes standard criteria tags and outputs 3 to 4 technical, situational, or behavioral assessment check questions.</p>
-                <button
-                  onClick={generateAIQuestions}
-                  className="w-full bg-cyan-400 text-slate-950 text-xs font-black py-2 rounded-lg hover:bg-cyan-300 transition-all cursor-pointer inline-flex items-center justify-center gap-1"
-                >
-                  <Sparkles className="w-3.5 h-3.5 fill-slate-950" />
-                  Generate AI Questions
-                </button>
-              </div>
+          <div className="flex items-center gap-3">
+            <label className="text-sm font-bold text-slate-600 font-mono">Active Job Context:</label>
+            <select
+              value={jobForQuestions}
+              onChange={(e) => setJobForQuestions(e.target.value)}
+              className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm text-slate-800 focus:ring-2 focus:ring-indigo-600 outline-none font-bold cursor-pointer"
+            >
+              {jobs.map(jb => (
+                <option key={jb.id} value={jb.id}>{jb.title} ({jb.company})</option>
+              ))}
+            </select>
+            <button
+              onClick={generateAIQuestions}
+              disabled={jobs.length === 0}
+              className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 font-bold text-white rounded-xl text-xs transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-40 select-none shadow-md"
+            >
+              <Play className="w-3.5 h-3.5 text-white" />
+              Generate Screening Tracks
+            </button>
+          </div>
 
-              <div className="bg-indigo-950/10 border border-indigo-500/15 p-4 rounded-xl space-y-2">
-                <span className="text-[9px] uppercase font-bold text-indigo-400 tracking-wider block font-mono">Employer Pro Advisory</span>
-                <p className="text-[10px] text-slate-300 leading-normal italic">Recommend screening questions are synced with applicant pipelines. Candidates can perform responses voice evaluations when selected.</p>
+          <div className="space-y-3 pt-3">
+            {generatedQuestions.map((qs, i) => (
+              <div key={i} className="p-4 bg-slate-50/70 border border-slate-200 rounded-2xl flex gap-3.5 items-start">
+                <div className="w-7 h-7 bg-indigo-50 border border-indigo-105 rounded-xl flex items-center justify-center font-bold text-xs text-indigo-700 font-mono shrink-0">
+                  {i + 1}
+                </div>
+                <p className="text-sm text-slate-800 leading-normal font-medium">{qs}</p>
               </div>
-            </div>
-
-            <div className="lg:col-span-2 space-y-3.5">
-              <span className="text-[10px] uppercase font-extrabold text-slate-400 tracking-widest font-mono">AI Generated Assessment Checklist</span>
-              
-              <div className="space-y-2 text-xs">
-                {generatedQuestions.map((q, i) => (
-                  <div key={i} className="p-3 bg-slate-950/40 rounded-xl border border-white/5 flex gap-3 items-start">
-                    <span className="w-5 h-5 rounded-full bg-cyan-400/10 text-cyan-300 flex items-center justify-center font-mono font-extrabold shrink-0 border border-cyan-500/10">
-                      {i + 1}
-                    </span>
-                    <p className="text-slate-200 mt-0.5 leading-relaxed font-sans">{q}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-
+            ))}
           </div>
         </div>
       )}
