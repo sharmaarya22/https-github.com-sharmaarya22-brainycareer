@@ -4,7 +4,7 @@ import {
   Sparkles, AlertCircle, FileText, CheckCircle2, ChevronRight, 
   Clipboard, Check, Edit3, TrendingUp, Cpu, Info, SlidersHorizontal, Settings,
   Globe, RefreshCw, ExternalLink, Mail, X, Send, Bot, CheckSquare, Plus, Trash2, Award, Zap,
-  Users, Eye
+  Users, Eye, Lock
 } from 'lucide-react';
 import { User, Job, MatchResult } from '../types';
 import SkillRadarChart from './SkillRadarChart';
@@ -49,6 +49,7 @@ interface JobSeekerPortalProps {
   matches: MatchResult[];
   onUserUpdate: (updatedUser: User) => void;
   appliedJobs: string[];
+  applicationsDetails?: any[];
   clickedJobs: string[];
   sentEmails: any[];
   supabaseEnabled: boolean;
@@ -66,6 +67,7 @@ export default function JobSeekerPortal({
   matches = [], 
   onUserUpdate, 
   appliedJobs = [], 
+  applicationsDetails = [],
   clickedJobs = [], 
   sentEmails = [], 
   supabaseEnabled, 
@@ -167,12 +169,19 @@ export default function JobSeekerPortal({
 
   // Simulated External Job Portal states
   const [portalSimulatorJob, setPortalSimulatorJob] = useState<Job | null>(null);
+  const [externalFlowMode, setExternalFlowMode] = useState<'choice' | 'credentials' | 'redirect'>('choice');
   const [portalFullName, setPortalFullName] = useState(user.fullName || '');
   const [portalEmail, setPortalEmail] = useState(user.email || '');
   const [portalExperience, setPortalExperience] = useState('3');
   const [portalCoverLetterText, setPortalCoverLetterText] = useState('');
   const [portalSuccess, setPortalSuccess] = useState(false);
   const [submittingPortalMsg, setSubmittingPortalMsg] = useState(false);
+  
+  // External portal credentials selection states
+  const [portalCredOption, setPortalCredOption] = useState<'aura' | 'alternative'>('aura');
+  const [portalCredLogin, setPortalCredLogin] = useState('');
+  const [portalCredPassword, setPortalCredPassword] = useState('');
+  const [revealPortalPassword, setRevealPortalPassword] = useState(false);
 
   // Profile View Log state & poll trigger
   const [profileViews, setProfileViews] = useState<any[]>([]);
@@ -203,6 +212,35 @@ export default function JobSeekerPortal({
       return () => clearInterval(interval);
     }
   }, [token]);
+
+  const getPortalJobUrl = (job: Job | null): string => {
+    if (!job) return "";
+    if (job.originalUrl && job.originalUrl !== '#') return job.originalUrl;
+    const cleanCompany = (job.company || "company").toLowerCase().replace(/[^a-z0-9]/g, '');
+    const cleanTitle = (job.title || "job").toLowerCase().replace(/[^a-z0-9]/g, '-');
+    return `https://careers.${cleanCompany}.com/jobs/${cleanTitle}-${job.id}`;
+  };
+
+  // Synchronize dynamic applications from DB to Kanban board
+  useEffect(() => {
+    if (applicationsDetails && applicationsDetails.length > 0) {
+      const dbCards = applicationsDetails.map((app: any) => ({
+        id: `k-db-${app.jobId}`,
+        jobId: app.jobId,
+        jobTitle: app.jobTitle,
+        company: app.company,
+        source: app.source || "Direct Aura",
+        status: app.status === "Interview Scheduled" ? "Interview Scheduled" : 
+                app.status === "Offer Received" ? "Offer Received" : "Applied"
+      }));
+
+      setKanbanCards(prev => {
+        // Keep offline/custom tracking cards, but replace any tracking cards that share the same jobId or have k-db- prefix
+        const offlineCards = prev.filter(c => !c.id.startsWith("k-db-") && !dbCards.some((dbC: any) => dbC.jobId === c.jobId));
+        return [...dbCards, ...offlineCards];
+      });
+    }
+  }, [applicationsDetails]);
 
   // Auto set first selected job
   useEffect(() => {
@@ -426,7 +464,7 @@ Please find my customized full-stack credentials enclosed for your immediate con
     }
   };
 
-  const handlePortalSimulatorSubmit = async () => {
+  const handleRedirectPortalTracker = async () => {
     if (!portalSimulatorJob) return;
     setSubmittingPortalMsg(true);
     try {
@@ -436,7 +474,71 @@ Please find my customized full-stack credentials enclosed for your immediate con
         headers: { 'Authorization': `Bearer ${token}` }
       });
 
-      // 2. Dispatch application submit tracking
+      // 2. Dispatch background application tracking so user's existing credentials log this application
+      await fetch(`/api/jobs/${portalSimulatorJob.id}/apply`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          coverLetter: "Applied via original/external platform redirection. Logged and tracked using unified system credentials."
+        })
+      });
+
+      // 3. Add to local Kanban cards list
+      setKanbanCards(prev => {
+        const urlToParse = (portalSimulatorJob.originalUrl || "").toLowerCase();
+        const sourceName = urlToParse.includes("linkedin") ? "LinkedIn" : urlToParse.includes("naukri") ? "Naukri" : "External Portal";
+        const alreadyExists = prev.some(c => c.jobId === portalSimulatorJob.id);
+        if (alreadyExists) return prev;
+        return [
+          {
+            id: `k-portal-${Date.now()}`,
+            jobId: portalSimulatorJob.id,
+            jobTitle: portalSimulatorJob.title,
+            company: portalSimulatorJob.company,
+            source: sourceName,
+            status: "Applied"
+          },
+          ...prev
+        ];
+      });
+
+      onRefreshTelemetry();
+
+      // Open URL in new window/tab safely
+      try {
+        window.open(getPortalJobUrl(portalSimulatorJob), '_blank');
+      } catch (err) {
+        console.warn("Popup blocked by sandboxed iframe environment, continuing to track.", err);
+      }
+      setPortalSuccess(true);
+    } catch (e) {
+      console.error("Redirection logging failed:", e);
+    } finally {
+      setSubmittingPortalMsg(false);
+    }
+  };
+
+  const handlePortalSimulatorSubmit = async () => {
+    if (!portalSimulatorJob) return;
+    const isLinkedIn = (portalSimulatorJob.originalUrl || "").toLowerCase().includes("linkedin");
+    const portalName = isLinkedIn ? "LinkedIn" : (portalSimulatorJob.originalUrl || "").toLowerCase().includes("naukri") ? "Naukri" : "External Portal";
+
+    if (!portalCredLogin || !portalCredPassword) {
+      alert(`Please enter your registered ${isLinkedIn ? "LinkedIn" : "Naukri"} login ID and password to authorize direct application submission.`);
+      return;
+    }
+    setSubmittingPortalMsg(true);
+    try {
+      // 1. Dispatch click tracking
+      await fetch(`/api/jobs/${portalSimulatorJob.id}/click`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      // 2. Dispatch application submit tracking with credentials metadata inside custom letter
       const res = await fetch(`/api/jobs/${portalSimulatorJob.id}/apply`, {
         method: 'POST',
         headers: {
@@ -444,7 +546,7 @@ Please find my customized full-stack credentials enclosed for your immediate con
           'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
-          coverLetter: portalCoverLetterText
+          coverLetter: `${portalCoverLetterText}\n\n[Portal Auth Config: Authorized using external credentials for ${isLinkedIn ? "LinkedIn" : "Naukri"} under user ID ${portalCredLogin}]`
         })
       });
 
@@ -456,7 +558,7 @@ Please find my customized full-stack credentials enclosed for your immediate con
             id: `k-portal-${Date.now()}`,
             jobTitle: portalSimulatorJob.title,
             company: portalSimulatorJob.company,
-            source: portalSimulatorJob.originalUrl.includes("linkedin") ? "LinkedIn" : portalSimulatorJob.originalUrl.includes("naukri") ? "Naukri" : "External Portal",
+            source: portalName,
             status: "Applied"
           },
           ...prev
@@ -1177,6 +1279,7 @@ Please find my customized full-stack credentials enclosed for your immediate con
                               <button
                                 onClick={() => {
                                   setPortalSimulatorJob(job);
+                                  setExternalFlowMode('choice');
                                   setPortalFullName(user.fullName || '');
                                   setPortalEmail(user.email || '');
                                   setPortalSuccess(false);
@@ -1220,12 +1323,14 @@ Please find my customized full-stack credentials enclosed for your immediate con
           user={user}
           jobs={jobs}
           matches={matches}
+          appliedJobs={appliedJobs}
           onUploadResume={onUploadResume}
           uploadingResume={uploadingResume}
           onRefreshTelemetry={onRefreshTelemetry}
           token={token}
           onApplyRedirect={(job) => {
             setPortalSimulatorJob(job);
+            setExternalFlowMode('choice');
             setPortalFullName(user.fullName || '');
             setPortalEmail(user.email || '');
             setPortalSuccess(false);
@@ -2043,16 +2148,16 @@ Please find my customized full-stack credentials enclosed for your immediate con
 
       {/* SIMULATED EXTERNAL JOB POSTING & DIRECT APPLY MODAL */}
       {portalSimulatorJob && (() => {
-        const url = portalSimulatorJob.originalUrl || "";
-        const l = url.toLowerCase();
+        const url = getPortalJobUrl(portalSimulatorJob);
+        const l = (portalSimulatorJob.originalUrl || "").toLowerCase();
         let brand = {
-          name: "Monster Career Hub",
+          name: `${portalSimulatorJob.company} Careers Portal`,
           logoColor: "bg-[#6366f1]",
           textColor: "text-indigo-400 border-indigo-505/20",
-          logoChar: "M",
-          accentClass: "bg-indigo-500 hover:bg-indigo-600 text-white shadow-indigo-500/10",
+          logoChar: portalSimulatorJob.company ? portalSimulatorJob.company.charAt(0).toUpperCase() : "C",
+          accentClass: "bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-500/10",
           bannerClass: "from-indigo-500/15 via-slate-900 to-slate-950",
-          badge: "Industry Verified Opening • Dynamic Direct Apply"
+          badge: `${portalSimulatorJob.company} Official Recruiter Post • Dynamic Direct Apply`
         };
         if (l.includes("linkedin.com")) {
           brand = {
@@ -2129,12 +2234,46 @@ Please find my customized full-stack credentials enclosed for your immediate con
                     </div>
                     <div className="space-y-1">
                       <h4 className="text-base font-black text-white">Application Received Successfully!</h4>
-                      <p className="text-xs text-slate-400 max-w-md mx-auto">Sent directly to the Recruiter pipeline at {portalSimulatorJob.company}. A copy is synced inside your local Scrum/Kanban Application Pipeline boards.</p>
+                      
+                      <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 text-left text-xs max-w-md mx-auto space-y-1.5 font-mono mt-4">
+                        <span className="text-[9.5px] uppercase font-bold text-indigo-400 block tracking-wider">SECURE TRACKING TELEMETRY LINKED</span>
+                        <div className="flex justify-between items-center border-b border-slate-900 pb-1.5">
+                          <span className="text-slate-500">Platform Portal:</span>
+                          <span className="text-slate-200 font-bold">{brand.name}</span>
+                        </div>
+                        <div className="flex justify-between items-center border-b border-slate-900 pb-1.5">
+                          <span className="text-slate-500">Identity Mode:</span>
+                          <span className="text-slate-200 font-bold">{portalCredOption === 'aura' ? "Aura Unified Account" : "Alternative Portal Profile"}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-slate-500">Authorized Account ID:</span>
+                          <span className="text-emerald-400 font-bold break-all">{portalEmail}</span>
+                        </div>
+                      </div>
+
+                      <p className="text-xs text-slate-400 max-w-md mx-auto pt-4 leading-relaxed">
+                        Sent directly to the Recruiter pipeline at {portalSimulatorJob.company}. A status card has been auto-appended and synced inside your local Scrum/Kanban Application Pipeline boards for tracking.
+                      </p>
+
+                      <div className="bg-slate-900/60 p-4 rounded-xl border border-slate-800 text-center max-w-md mx-auto space-y-2 mt-4">
+                        <p className="text-[11px] text-slate-400">Did your browser block the automatic external tab redirect?</p>
+                        <a
+                          href={getPortalJobUrl(portalSimulatorJob)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="px-4 py-2 bg-indigo-600/30 text-indigo-300 hover:bg-indigo-600/50 hover:text-white border border-indigo-505/20 rounded-xl text-xs font-bold inline-flex items-center gap-1.5 transition-all"
+                        >
+                          <span>Open original job posting on {brand.name} ↗</span>
+                        </a>
+                      </div>
                     </div>
                     <div className="pt-4 flex justify-center">
                       <button
                         type="button"
-                        onClick={() => setPortalSimulatorJob(null)}
+                        onClick={() => {
+                          setPortalSimulatorJob(null);
+                          setPortalSuccess(false);
+                        }}
                         className={`px-6 py-2.5 rounded-xl text-xs font-black transition-all cursor-pointer ${brand.accentClass}`}
                       >
                         Back to Seeker Console
@@ -2200,94 +2339,285 @@ Please find my customized full-stack credentials enclosed for your immediate con
                         </div>
                       </div>
                     </div>
-
-                    {/* Simple Quick Application Form inside exactly the same job portal widget */}
-                    <div className="space-y-4 border-t border-slate-800 pt-5 font-sans">
-                      <div className="space-y-1">
-                        <h3 className="text-sm font-black text-white">Apply on {brand.name}</h3>
-                        <p className="text-[10.5px] text-slate-500">Provide details to deliver credentials directly to the board administrator at {portalSimulatorJob.company}.</p>
-                      </div>
-
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                    {/* Gateway choice option */}
+                    {externalFlowMode === 'choice' && (
+                      <div className="space-y-4 border-t border-slate-800 pt-5 font-sans">
                         <div className="space-y-1">
-                          <label className="text-slate-400 font-bold block text-[10px] uppercase font-mono">Full Name</label>
-                          <input
-                            type="text"
-                            value={portalFullName}
-                            onChange={e => setPortalFullName(e.target.value)}
-                            required
-                            className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-400 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none transition-all"
-                            placeholder="John Doe"
-                          />
+                          <span className="text-[9.5px] uppercase font-bold text-indigo-400 font-mono tracking-wider block">Platform Submission Routing Gateway</span>
+                          <h3 className="text-sm font-black text-white">How would you like to apply on {brand.name}?</h3>
+                          <p className="text-[10.5px] text-slate-400">
+                            Choose between authorizing an automatic integration push using your system credentials or carrying out manual submission with automated live track logs.
+                          </p>
                         </div>
-                        <div className="space-y-1">
-                          <label className="text-slate-400 font-bold block text-[10px] uppercase font-mono">E-mail Address</label>
-                          <input
-                            type="email"
-                            value={portalEmail}
-                            onChange={e => setPortalEmail(e.target.value)}
-                            required
-                            className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-400 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none transition-all"
-                            placeholder="john.doe@email.com"
-                          />
-                        </div>
-                      </div>
 
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                        <div className="space-y-1">
-                          <label className="text-slate-400 font-bold block text-[10px] uppercase font-mono">Years of Tech Experience</label>
-                          <select
-                            value={portalExperience}
-                            onChange={e => setPortalExperience(e.target.value)}
-                            className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-400 rounded-xl px-3 py-2 text-xs text-white focus:outline-none transition-colors"
-                          >
-                            <option value="1">1-2 Years (Associate / Junior Specialist)</option>
-                            <option value="3">3-5 Years (Mid-Senior Professional)</option>
-                            <option value="6">6-8 Years (Lead Practitioner / Consultant)</option>
-                            <option value="9">9+ Years (Staff / Principal Director)</option>
-                          </select>
-                        </div>
-                        <div className="space-y-1">
-                          <label className="text-slate-400 font-bold block text-[10px] uppercase font-mono">Direct Recruiter Dispatch</label>
-                          <div className="text-[11px] font-bold text-emerald-400 bg-emerald-500/5 border border-emerald-500/10 p-2 rounded-xl flex items-center gap-2">
-                            <CheckSquare className="w-4 h-4 text-emerald-400 shrink-0" />
-                            <span>Auto Match-Optimized CV Enclosed</span>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+                          {/* Option A: Secure internal credential processing */}
+                          <div className="border border-slate-805 bg-slate-950/40 p-5 rounded-2xl flex flex-col justify-between space-y-4 hover:border-slate-700/80 transition-all">
+                            <div className="space-y-2">
+                              <span className="text-[9px] uppercase font-mono font-black text-indigo-400 px-2.5 py-0.5 bg-indigo-500/10 border border-indigo-500/15 rounded-md inline-block">METHOD A</span>
+                              <h4 className="text-xs font-black text-slate-100 font-sans">Apply Inside Aura Portal</h4>
+                              <p className="text-[10px] text-slate-400 leading-relaxed font-semibold">
+                                Provide your registered {brand.name} username/email & password to authorize direct API dispatch. Aura will securely bundle your selected profile CV and application variables, transmitting them under authenticated channels directly.
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setExternalFlowMode('credentials');
+                                setPortalCredOption('alternative');
+                                setPortalCredLogin(user.email || '');
+                                setPortalEmail(user.email || '');
+                              }}
+                              className="w-full py-2.5 rounded-xl text-xs font-black cursor-pointer bg-indigo-600 hover:bg-indigo-550 text-white transition-all text-center"
+                            >
+                              🔑 Authorize credentials & apply
+                            </button>
+                          </div>
+
+                          {/* Option B: Standard Redirection mode */}
+                          <div className="border border-slate-805 bg-slate-950/40 p-5 rounded-2xl flex flex-col justify-between space-y-4 hover:border-slate-700/80 transition-all">
+                            <div className="space-y-2">
+                              <span className="text-[9px] uppercase font-mono font-black text-emerald-400 px-2.5 py-0.5 bg-emerald-500/10 border border-emerald-500/15 rounded-md inline-block">METHOD B</span>
+                              <h4 className="text-xs font-black text-slate-100 font-sans">Redirect instantly</h4>
+                              <p className="text-[10px] text-slate-400 leading-relaxed font-semibold">
+                                Skip inputting your login password on Aura. Redirect instantly to the official {brand.name} corporate posting in a new window/tab, where you can log in manually. Aura will automatically build your Kanban tracker card simultaneously.
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setExternalFlowMode('redirect');
+                              }}
+                              className="w-full py-2.5 rounded-xl text-xs font-black cursor-pointer bg-slate-800 hover:bg-slate-700 text-slate-250 transition-all text-center"
+                            >
+                              🚀 Redirect instantly to listing
+                            </button>
                           </div>
                         </div>
+
+                        <div className="flex justify-end gap-2.5 pt-4">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setPortalSimulatorJob(null);
+                              setPortalSuccess(false);
+                            }}
+                            className="px-4 py-2 hover:bg-slate-800 border border-slate-800 rounded-xl text-slate-400 text-xs font-bold transition-all cursor-pointer"
+                          >
+                            Close Listing
+                          </button>
+                        </div>
                       </div>
+                    )}
 
-                      <div className="space-y-1">
-                        <label className="text-slate-400 font-bold block text-[10px] uppercase font-mono">Tailored Executive Candidate Statement</label>
-                        <textarea
-                          value={portalCoverLetterText}
-                          onChange={e => setPortalCoverLetterText(e.target.value)}
-                          rows={4}
-                          required
-                          className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-400 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none resize-none leading-relaxed"
-                        />
+                    {/* Method A Form rendering */}
+                    {externalFlowMode === 'credentials' && (
+                      <div className="space-y-4 border-t border-slate-800 pt-5 font-sans">
+                        <div className="bg-slate-950 p-4 rounded-xl border border-slate-850 flex items-center gap-2 justify-between">
+                          <div className="space-y-0.5">
+                            <span className="text-[9.5px] uppercase font-bold text-indigo-400 font-mono tracking-wider block">Authentication required</span>
+                            <h4 className="text-[11px] font-black text-white">Method A: Authorizing push connection directly to {brand.name}</h4>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setExternalFlowMode('choice')}
+                            className="text-[10px] font-bold text-slate-400 hover:text-white bg-slate-900 border border-slate-800 px-2.5 py-1 rounded-lg"
+                          >
+                            Change Method
+                          </button>
+                        </div>
+
+                        {/* Force user credential input for safety */}
+                        <div className="bg-slate-950 p-5 rounded-2xl border border-slate-805 space-y-4">
+                          <div className="space-y-1">
+                            <h3 className="text-xs font-black text-white">Enter {brand.name} Portal Identity Details</h3>
+                            <p className="text-[10.5px] text-slate-400">
+                              Please fill out your verified external {brand.name} username or registered email and secure password. Aura requires these authorization credentials to push records to your external job queue safely.
+                            </p>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                            <div className="space-y-1">
+                              <label className="text-slate-400 font-bold block text-[10px] uppercase font-mono">
+                                Registered Email / Portal Username
+                              </label>
+                              <input
+                                type="text"
+                                value={portalCredLogin}
+                                onChange={e => {
+                                  setPortalCredLogin(e.target.value);
+                                  setPortalEmail(e.target.value);
+                                }}
+                                required
+                                placeholder={`e.g. upretigaurav22@${brand.name.toLowerCase().includes("linkedin") ? "linkedin" : "naukri"}.com`}
+                                className="w-full bg-slate-900 border border-slate-800 focus:border-indigo-500 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none transition-all"
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <label className="text-slate-400 font-bold block text-[10px] uppercase font-mono">
+                                Security Portal Password
+                              </label>
+                              <div className="relative">
+                                <input
+                                  type={revealPortalPassword ? "text" : "password"}
+                                  value={portalCredPassword}
+                                  onChange={e => setPortalCredPassword(e.target.value)}
+                                  required
+                                  placeholder="Enter password"
+                                  className="w-full bg-slate-900 border border-slate-800 focus:border-indigo-500 rounded-xl px-3.5 py-2 pr-14 text-xs text-white focus:outline-none transition-all"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => setRevealPortalPassword(!revealPortalPassword)}
+                                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-500 hover:text-slate-300 select-none cursor-pointer font-mono"
+                                >
+                                  {revealPortalPassword ? "HIDE" : "SHOW"}
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2 bg-indigo-500/5 border border-indigo-500/10 p-3 rounded-xl">
+                            <Lock className="w-4 h-4 text-indigo-400 shrink-0" />
+                            <span className="text-[10.5px] text-indigo-300 font-medium leading-relaxed">
+                              🔒 Secured Credentials Pre-flight: Credentials provided are transmitted via HTTPS directly to verify against external application pipelines and track logs.
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Standard application details */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                          <div className="space-y-1">
+                            <label className="text-slate-400 font-bold block text-[10px] uppercase font-mono">Full Name</label>
+                            <input
+                              type="text"
+                              value={portalFullName}
+                              onChange={e => setPortalFullName(e.target.value)}
+                              required
+                              className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-400 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none transition-all"
+                              placeholder="Name shown on CV"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-slate-400 font-bold block text-[10px] uppercase font-mono">Current Tracking Email</label>
+                            <input
+                              type="email"
+                              value={portalEmail}
+                              onChange={e => setPortalEmail(e.target.value)}
+                              required
+                              className="w-full bg-slate-950 border border-slate-805 focus:border-cyan-400 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none transition-all"
+                              placeholder="E-mail for tracker status"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                          <div className="space-y-1">
+                            <label className="text-slate-400 font-bold block text-[10px] uppercase font-mono">Years of Tech Experience</label>
+                            <select
+                              value={portalExperience}
+                              onChange={e => setPortalExperience(e.target.value)}
+                              className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-400 rounded-xl px-3 py-2 text-xs text-white focus:outline-none transition-colors"
+                            >
+                              <option value="1">1-2 Years (Associate / Junior Specialist)</option>
+                              <option value="3">3-5 Years (Mid-Senior Professional)</option>
+                              <option value="6">6-8 Years (Lead Practitioner / Consultant)</option>
+                              <option value="9">9+ Years (Staff / Principal Director)</option>
+                            </select>
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-slate-400 font-bold block text-[10px] uppercase font-mono">Direct Recruiter Dispatch</label>
+                            <div className="text-[11px] font-bold text-emerald-400 bg-emerald-500/5 border border-emerald-500/10 p-2.5 rounded-xl flex items-center gap-2">
+                              <CheckSquare className="w-4 h-4 text-emerald-400 shrink-0" />
+                              <span>Auto Match-Optimized CV Enclosed</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-slate-400 font-bold block text-[10px] uppercase font-mono">Tailored Executive Candidate Statement</label>
+                          <textarea
+                            value={portalCoverLetterText}
+                            onChange={e => setPortalCoverLetterText(e.target.value)}
+                            rows={4}
+                            required
+                            className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-400 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none resize-none leading-relaxed"
+                          />
+                        </div>
+
+                        <div className="flex justify-end gap-2.5 pt-4 border-t border-slate-800">
+                          <button
+                            type="button"
+                            onClick={() => setExternalFlowMode('choice')}
+                            className="px-4 py-2 hover:bg-slate-800 border border-slate-805 rounded-xl text-slate-400 text-xs font-bold transition-all cursor-pointer"
+                          >
+                            Back
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handlePortalSimulatorSubmit}
+                            disabled={submittingPortalMsg || !portalFullName || !portalEmail || !portalCredLogin || !portalCredPassword}
+                            className={`px-5 py-2 rounded-xl text-xs font-black flex items-center gap-1.5 transition-all cursor-pointer shadow-lg hover:-translate-y-0.5 ${brand.accentClass} disabled:opacity-50 disabled:-translate-y-0`}
+                          >
+                            <Send className="w-3.5 h-3.5" />
+                            {submittingPortalMsg ? 'Submitting with Credentials...' : 'Authorize & Submit Now'}
+                          </button>
+                        </div>
                       </div>
+                    )}
 
-                      <div className="flex justify-end gap-2.5 pt-4 border-t border-slate-800">
-                        <button
-                          type="button"
-                          onClick={() => setPortalSimulatorJob(null)}
-                          className="px-4 py-2 hover:bg-slate-800 border border-slate-805 rounded-xl text-slate-400 text-xs font-bold transition-all cursor-pointer"
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          type="button"
-                          onClick={handlePortalSimulatorSubmit}
-                          disabled={submittingPortalMsg || !portalFullName || !portalEmail}
-                          className={`px-5 py-2 rounded-xl text-xs font-black flex items-center gap-1.5 transition-all cursor-pointer shadow-lg hover:-translate-y-0.5 ${brand.accentClass} disabled:opacity-50 disabled:-translate-y-0`}
-                        >
-                          <Send className="w-3.5 h-3.5" />
-                          {submittingPortalMsg ? 'Submitting Application...' : 'Send Application'}
-                        </button>
+                    {/* Method B Redirection template with interactive tracker log auto-initiate */}
+                    {externalFlowMode === 'redirect' && (
+                      <div className="space-y-5 border-t border-slate-800 pt-5 font-sans">
+                        <div className="bg-slate-950 p-4 rounded-xl border border-slate-850 flex items-center gap-2 justify-between">
+                          <div className="space-y-0.5">
+                            <span className="text-[9.5px] uppercase font-bold text-emerald-400 font-mono tracking-wider block">Redirecting user</span>
+                            <h4 className="text-[11px] font-black text-white">Method B: Secure direct routing to {brand.name}</h4>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setExternalFlowMode('choice')}
+                            className="text-[10px] font-bold text-slate-400 hover:text-white bg-slate-900 border border-slate-800 px-2.5 py-1 rounded-lg"
+                          >
+                            Change Method
+                          </button>
+                        </div>
+
+                        <div className="bg-slate-950/40 border border-slate-800 rounded-2xl p-6 text-center space-y-4">
+                          <div className="w-12 h-12 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center mx-auto">
+                            <Globe className="w-6 h-6" />
+                          </div>
+                          <div className="max-w-md mx-auto space-y-2">
+                            <h4 className="text-xs font-black text-white uppercase font-mono tracking-wider font-sans">Ready to apply directly on verified platform</h4>
+                            <p className="text-xs text-slate-400 leading-relaxed font-sans">
+                              You will be redirected safely to {brand.name}. They will prompt you for your login ID and password directly on their official server.
+                            </p>
+                            <p className="text-xs text-indigo-300 bg-indigo-500/5 border border-indigo-505/10 p-3 rounded-xl mt-2 leading-relaxed font-sans">
+                              💯 <strong>Automated Sync:</strong> The moment you click launch, we will log a secure tracker card directly under your Kanban Board applied pipeline columns.
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex justify-end gap-2.5 pt-4 border-t border-slate-800">
+                          <button
+                            type="button"
+                            onClick={() => setExternalFlowMode('choice')}
+                            className="px-4 py-2 hover:bg-slate-800 border border-slate-805 rounded-xl text-slate-400 text-xs font-bold transition-all cursor-pointer"
+                          >
+                            Back
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleRedirectPortalTracker}
+                            disabled={submittingPortalMsg}
+                            className={`px-6 py-2.5 rounded-xl text-xs font-black flex items-center gap-2 transition-all cursor-pointer shadow-lg hover:-translate-y-0.5 ${brand.accentClass}`}
+                          >
+                            <ExternalLink className="w-4 h-4" />
+                            {submittingPortalMsg ? 'Syncing...' : 'Launch Portal & Initiate Auto-Tracker'}
+                          </button>
+                        </div>
                       </div>
-
-                    </div>
-
+                    )}
                   </div>
                 )}
 

@@ -695,6 +695,56 @@ export default function EmployerPortal({
                   </div>
                 </div>
 
+                {/* CANDIDATE SUBMITTED APPLICATIONS & TRACKING COVER LETTERS */}
+                <div className="space-y-3.5 border-t border-slate-100 pt-6">
+                  <div className="flex items-center gap-2">
+                    <Briefcase className="w-4 h-4 text-indigo-600 shrink-0" />
+                    <h4 className="text-xs uppercase tracking-widest font-black text-slate-900 font-mono">
+                      Submitted Applications & Custom Core Pitches ({selectedApplicant.applications?.length || 0})
+                    </h4>
+                  </div>
+                  
+                  {selectedApplicant.applications && selectedApplicant.applications.length > 0 ? (
+                    <div className="space-y-3">
+                      {selectedApplicant.applications.map((appItem: any, appIdx: number) => (
+                        <div key={appIdx} className="bg-slate-50 border border-slate-200 p-4 rounded-2xl space-y-2.5 shadow-2xs">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-150 pb-2">
+                            <div>
+                              <span className="text-xs font-black text-slate-900 block leading-tight">
+                                {appItem.jobTitle}
+                              </span>
+                              <span className="text-[11px] text-slate-500 font-semibold mt-1 block">
+                                {appItem.company} • Portal Source: <span className="font-extrabold text-indigo-650">{appItem.source || "Direct Portal"}</span>
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-[10px] text-slate-400 font-mono font-bold bg-white border border-slate-200 px-2 py-0.5 rounded-lg">
+                                {new Date(appItem.appliedAt).toLocaleDateString()}
+                              </span>
+                              <span className="bg-indigo-50 border border-indigo-150 text-indigo-700 text-[9.5px] font-mono font-black uppercase px-2.5 py-0.5 rounded-full">
+                                {appItem.status}
+                              </span>
+                            </div>
+                          </div>
+                          
+                          {appItem.coverLetter && (
+                            <div className="text-xs text-slate-600 space-y-1 bg-white p-3 rounded-xl border border-slate-150">
+                              <span className="text-[9.5px] uppercase font-bold text-slate-400 block font-mono">CUSTOM LETTER ENCLOSED</span>
+                              <p className="whitespace-pre-wrap font-sans text-xs leading-relaxed text-slate-700">
+                                {appItem.coverLetter}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-xs text-slate-450 font-mono italic p-4 bg-slate-50 border border-slate-200 border-dashed rounded-2xl">
+                      No applications logged on local system for this candidate yet.
+                    </div>
+                  )}
+                </div>
+
                 {/* FULL-STACK DIRECT CHAT WORKSPACE */}
                 <div className="border-t border-slate-100 pt-6 space-y-4">
                   <div className="flex justify-between items-center bg-slate-50 border border-slate-205 p-3 px-4.5 rounded-xl">

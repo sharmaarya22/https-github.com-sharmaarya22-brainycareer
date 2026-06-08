@@ -548,16 +548,15 @@ ${user.fullName || "Aura Candidate"}`;
 
                           <div className="flex items-center justify-between text-[9px] text-slate-500 font-mono mt-1 px-1 border-t border-slate-205 pt-2">
                             <span>Accuracyfit: {match.score}%</span>
-                            <button
-                              onClick={() => {
-                                const simUrl = `https://careers.${job.company.toLowerCase().replace(/[^a-z0-9]/g, '')}.com/jobs/${job.id}`;
-                                window.open(job.originalUrl !== '#' ? job.originalUrl : simUrl, '_blank');
-                              }}
-                              className="text-indigo-600 font-bold hover:underline cursor-pointer flex items-center gap-0.5"
+                            <a
+                              href={job.originalUrl !== '#' ? job.originalUrl : `https://careers.${job.company.toLowerCase().replace(/[^a-z0-9]/g, '')}.com/jobs/${job.id}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-indigo-600 font-bold hover:underline cursor-pointer flex items-center gap-0.5 inline-flex"
                             >
                               <span>Redirect Job Portal</span>
                               <ArrowRight className="w-2.5 h-2.5" />
-                            </button>
+                            </a>
                           </div>
                         </div>
                       )}

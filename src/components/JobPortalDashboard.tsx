@@ -35,6 +35,7 @@ export default function JobPortalDashboard({ user, token, onLogout, onUserUpdate
 
   // Telemetry properties synced from database
   const [appliedJobs, setAppliedJobs] = useState<string[]>([]);
+  const [applicationsDetails, setApplicationsDetails] = useState<any[]>([]);
   const [clickedJobs, setClickedJobs] = useState<string[]>([]);
   const [sentEmails, setSentEmails] = useState<any[]>([]);
   const [supabaseEnabled, setSupabaseEnabled] = useState(false);
@@ -155,6 +156,7 @@ export default function JobPortalDashboard({ user, token, onLogout, onUserUpdate
       if (res.ok) {
         const data = await res.json();
         setAppliedJobs(data.applied || []);
+        setApplicationsDetails(data.appliedDetails || []);
         setClickedJobs(data.clicked || []);
         setSentEmails(data.emails || []);
         setSupabaseEnabled(data.supabaseEnabled || false);
@@ -491,6 +493,7 @@ export default function JobPortalDashboard({ user, token, onLogout, onUserUpdate
               matches={matches}
               onUserUpdate={onUserUpdate}
               appliedJobs={appliedJobs}
+              applicationsDetails={applicationsDetails || []}
               clickedJobs={clickedJobs}
               sentEmails={sentEmails}
               supabaseEnabled={supabaseEnabled}
