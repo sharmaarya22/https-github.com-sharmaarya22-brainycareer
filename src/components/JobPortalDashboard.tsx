@@ -60,7 +60,13 @@ export default function JobPortalDashboard({ user, token, onLogout, onUserUpdate
   });
 
   // Safe client plans level simulation
-  const [userPlan, setUserPlan] = useState<'Free' | 'Pro' | 'Enterprise'>('Free');
+  const [userPlan, setUserPlan] = useState<'Free' | 'Pro' | 'Enterprise'>(() => user.plan || 'Free');
+
+  useEffect(() => {
+    if (user && user.plan) {
+      setUserPlan(user.plan);
+    }
+  }, [user]);
   
   const [uploadingResume, setUploadingResume] = useState(false);
 
@@ -234,10 +240,16 @@ export default function JobPortalDashboard({ user, token, onLogout, onUserUpdate
 
   const handleUpdateUserPlan = (selectedPlan: 'Free' | 'Pro' | 'Enterprise') => {
     setUserPlan(selectedPlan);
+    onUserUpdate({ ...user, plan: selectedPlan });
     triggerToast(
       "Upgrade Successful!",
       `Congratulations! You have upgraded to the "${selectedPlan}" workspace. Advanced corporate search and ATS metrics are fully enabled.`
     );
+    // Reload activities to get the billing emails & notifications list instantly
+    setTimeout(() => {
+      fetchLiveNotifications();
+      fetchTelemetryActivities();
+    }, 500);
   };
 
   const unreadCount = notifications.filter(n => !n.read).length;
@@ -248,14 +260,14 @@ export default function JobPortalDashboard({ user, token, onLogout, onUserUpdate
       {/* Sticky Top Header of clean light theme */}
       <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200 px-6 py-4.5 flex items-center justify-between shadow-sm">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-indigo-500 flex items-center justify-center shadow-lg shadow-indigo-100 text-white font-black text-base tracking-tighter">
-            AJ
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-indigo-500 flex items-center justify-center shadow-lg shadow-indigo-100 text-white font-black text-sm tracking-tighter">
+            BC
           </div>
           <div>
             <h1 className="text-base font-black text-slate-900 tracking-tight flex items-center gap-1.5 leading-none">
-              AURA GLOBAL <span className="text-[10px] text-indigo-700 font-bold bg-indigo-50 px-2 py-0.5 rounded font-mono border border-indigo-155">AI MARKETPLACE</span>
+              Brainy<span className="text-indigo-600 font-black">Career.com</span> <span className="text-[9px] text-indigo-700 font-bold bg-indigo-50 px-2 py-0.5 rounded font-mono border border-indigo-150">AI PORTAL</span>
             </h1>
-            <p className="text-xs uppercase font-extrabold text-slate-400 mt-1.5 tracking-wider">Autonomous Multi-Role Recruitment Suite</p>
+            <p className="text-[10px] uppercase font-mono font-bold text-slate-400 mt-1.5 tracking-wider">Three-Portal Unified Architecture</p>
           </div>
         </div>
 
@@ -502,6 +514,8 @@ export default function JobPortalDashboard({ user, token, onLogout, onUserUpdate
               onUploadResume={handleResumeUpload}
               uploadingResume={uploadingResume}
               onShowToast={triggerToast}
+              currentPlan={userPlan}
+              onNavigatePricing={() => setActivePortal('pricing')}
             />
           )}
 
@@ -524,6 +538,7 @@ export default function JobPortalDashboard({ user, token, onLogout, onUserUpdate
           {activePortal === 'pricing' && (
             <PricingTiers 
               currentPlan={userPlan}
+              token={token}
               onSelectPlan={handleUpdateUserPlan}
             />
           )}

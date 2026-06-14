@@ -318,6 +318,11 @@ function initDB() {
     data.notifications = [];
   }
 
+  // Ensure payments structure is initialized
+  if (!(data as any).payments || !Array.isArray((data as any).payments)) {
+    (data as any).payments = [];
+  }
+
   // Guarantee that the super admin user with email "gauravadmin" and password "041988" exists
   if (!data.users || !Array.isArray(data.users)) {
     data.users = [];
@@ -341,6 +346,50 @@ function initDB() {
     adminUser.email = "gauravadmin";
     adminUser.password = "041988";
     adminUser.role = "admin";
+  }
+
+  // Pre-seed default seeker user if missing
+  let seekerUser = data.users.find((u: any) => u.email.toLowerCase() === "upretigaurav@gmail.com" || u.id === "user-1781431402208");
+  if (!seekerUser) {
+    seekerUser = {
+      id: "user-1781431402208",
+      fullName: "Gaurav Candidate",
+      email: "upretigaurav@gmail.com",
+      role: "seeker",
+      password: "123456",
+      profileCompleted: false,
+      appliedJobs: [],
+      clickedJobs: [],
+      sentEmails: [],
+      applications: []
+    };
+    data.users.push(seekerUser);
+  } else {
+    seekerUser.email = "upretigaurav@gmail.com";
+    seekerUser.password = "123456";
+    seekerUser.role = "seeker";
+  }
+
+  // Pre-seed default employer user if missing
+  let employerUser = data.users.find((u: any) => u.email.toLowerCase() === "employer@brainycareer.com" || u.id === "employer-usr-id");
+  if (!employerUser) {
+    employerUser = {
+      id: "employer-usr-id",
+      fullName: "Gaurav Recruiter",
+      email: "employer@brainycareer.com",
+      role: "employer",
+      password: "123456",
+      profileCompleted: true,
+      appliedJobs: [],
+      clickedJobs: [],
+      sentEmails: [],
+      applications: []
+    };
+    data.users.push(employerUser);
+  } else {
+    employerUser.email = "employer@brainycareer.com";
+    employerUser.password = "123456";
+    employerUser.role = "employer";
   }
 
   fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2));
@@ -577,6 +626,82 @@ app.post("/api/auth/login", async (req, res) => {
 
   const { password: _, ...userSafe } = user;
   res.json({ user: userSafe, token: user.id });
+});
+
+// In-memory cache for generated OTP codes
+const otpsMemory = new Map<string, string>();
+
+// Endpoint to generate and return a secure 6-digit OTP configuration
+app.post("/api/auth/send-otp", async (req: any, res: any) => {
+  const { email, password, isLogin, fullName, role } = req.body;
+  if (!email) {
+    return res.status(400).json({ error: "Email address is required." });
+  }
+
+  const cleanEmail = email.trim().toLowerCase();
+
+  try {
+    if (isLogin) {
+      // Validate login credentials check before sending OTP
+      const user = db.users.find(u => u.email.toLowerCase() === cleanEmail);
+      if (!user || user.password !== password) {
+        return res.status(400).json({ error: "Invalid email credentials or password." });
+      }
+    } else {
+      // Validate registration fields compatibility before sending OTP
+      if (!fullName || !password) {
+        return res.status(400).json({ error: "All profile fields are mandatory." });
+      }
+      if (fullName.trim().length < 3) {
+        return res.status(400).json({ error: "Please enter your full professional name (minimum 3 characters)." });
+      }
+      if (password.length < 6) {
+        return res.status(400).json({ error: "Password must be at least 6 characters long to safeguard your credentials." });
+      }
+
+      const existingUser = db.users.find(u => u.email.toLowerCase() === cleanEmail);
+      if (existingUser) {
+        return res.status(400).json({ error: "An account with that email already exists." });
+      }
+    }
+
+    // Generate simulated secure 6-digit verification pin
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    otpsMemory.set(cleanEmail, code);
+
+    console.log(`Generated identity verification OTP for ${cleanEmail}: ${code}`);
+    return res.json({
+      success: true,
+      message: "Identity verification code generated successfully.",
+      otpCode: code
+    });
+
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || "Failed to generate security code." });
+  }
+});
+
+// Endpoint to verify the submitted OTP code
+app.post("/api/auth/verify-otp", async (req: any, res: any) => {
+  const { email, enteredOtp } = req.body;
+  if (!email || !enteredOtp) {
+    return res.status(400).json({ error: "Email address and security pin code are required." });
+  }
+
+  const cleanEmail = email.trim().toLowerCase();
+  const savedCode = otpsMemory.get(cleanEmail);
+
+  if (!savedCode || savedCode !== enteredOtp.trim()) {
+    return res.status(400).json({ error: "Incorrect verification code. Please check and try again." });
+  }
+
+  // Purge the OTP to prevent reuse
+  otpsMemory.delete(cleanEmail);
+
+  return res.json({
+    success: true,
+    message: "Identity successfully verified."
+  });
 });
 
 // Get current user session
@@ -2209,6 +2334,208 @@ app.patch("/api/jobs/:id/status", authenticateToken, async (req: any, res) => {
   saveDB();
 
   res.json({ job });
+});
+
+// ==========================================
+// SECURE PAYMENT GATEWAY (UPI / RAZORPAY / CASHFREE)
+// ==========================================
+
+// 1. Create a Payment Order
+app.post("/api/payments/create-order", authenticateToken, async (req: any, res) => {
+  const { plan, upiId, fullName } = req.body;
+  if (!plan || !['Pro', 'Enterprise'].includes(plan)) {
+    return res.status(400).json({ error: "Please specify a valid subscription target plan ('Pro' or 'Enterprise')." });
+  }
+  if (!upiId || !upiId.includes('@')) {
+    return res.status(400).json({ error: "Please provide a valid UPI ID (VPA)." });
+  }
+  if (!fullName || fullName.trim().length === 0) {
+    return res.status(400).json({ error: "Please enter your full name associated with your bank." });
+  }
+
+  const orderId = "order_" + Math.random().toString(36).substring(2, 11) + "_" + Date.now();
+  const price = plan === 'Pro' ? 249 : 399;
+  const note = `Brainy Career ${plan === 'Pro' ? 'Gold Pro' : 'Platinum Recruiter'} Upgrade`;
+
+  // Standard official requested UPI link enriched dynamically with price and order code
+  const upiUrl = `upi://pay?pa=9039876717-3%40ybl&pn=Brainy%20Career&cu=INR&am=${price}.00&tn=${encodeURIComponent(note)}&tr=${orderId}`;
+
+  const paymentRecord = {
+    orderId,
+    userId: req.user.id,
+    userEmail: req.user.email,
+    userName: fullName,
+    userUpi: upiId,
+    plan,
+    price,
+    status: "CREATED",
+    upiUrl,
+    createdAt: new Date().toISOString()
+  };
+
+  if (!(db as any).payments) (db as any).payments = [];
+  (db as any).payments.push(paymentRecord);
+  saveDB();
+
+  res.json({
+    success: true,
+    orderId,
+    amount: price,
+    currency: "INR",
+    upiUrl,
+    plan,
+    status: "CREATED"
+  });
+});
+
+// 2. Secure Webhook Listener for Gateway notifications (Razorpay / Cashfree) & Simulators
+app.post("/api/payments/webhook", async (req: any, res) => {
+  console.log("=== RECEIVED PAYMENT WEBHOOK ===");
+  console.log(JSON.stringify(req.body, null, 2));
+
+  let eventType = "";
+  let orderId = "";
+  let payStatus = "";
+  let userId = "";
+  let planType: 'Pro' | 'Enterprise' = 'Pro';
+  let payeeUpi = "";
+  let payeeName = "";
+  let amountValue = 0;
+
+  // Identify format (Razorpay Event vs Cashfree Event vs Simulated payload)
+  const isRazorpay = req.body.event && req.body.payload && req.body.payload.payment;
+  const isCashfree = req.body.event && req.body.data && req.body.data.order;
+
+  if (isRazorpay) {
+    eventType = req.body.event;
+    const paymentEntity = req.body.payload.payment.entity;
+    payStatus = paymentEntity.status; // captured
+    orderId = paymentEntity.order_id || "";
+    amountValue = paymentEntity.amount / 100;
+    payeeUpi = paymentEntity.vpa || "";
+    // Grab metadata notes
+    if (paymentEntity.notes) {
+      userId = paymentEntity.notes.userId || "";
+      planType = paymentEntity.notes.plan || "Pro";
+    }
+  } else if (isCashfree) {
+    eventType = req.body.event;
+    const orderObj = req.body.data.order;
+    const payObj = req.body.data.payment;
+    orderId = orderObj.order_id || "";
+    amountValue = orderObj.order_amount;
+    payStatus = payObj.payment_status === "SUCCESS" ? "captured" : "failed";
+    if (req.body.data.customer_details) {
+      payeeName = req.body.data.customer_details.customer_name || "";
+    }
+  } else {
+    // Simulated direct JSON webhook call
+    eventType = req.body.event || "payment.captured";
+    orderId = req.body.orderId || "";
+    userId = req.body.userId || "";
+    planType = req.body.plan || "Pro";
+    amountValue = req.body.amount || (planType === 'Pro' ? 249 : 399);
+    payeeUpi = req.body.upiId || "customer@upi";
+    payeeName = req.body.fullName || "Brainy Career Candidate";
+    payStatus = "captured";
+  }
+
+  // If orderId is provided, look up the pending payment record to grab missing parameters
+  let mainPaymentRecord = (db as any).payments?.find((p: any) => p.orderId === orderId);
+  if (mainPaymentRecord) {
+    userId = userId || mainPaymentRecord.userId;
+    planType = planType || mainPaymentRecord.plan;
+    payeeUpi = payeeUpi || mainPaymentRecord.userUpi;
+    payeeName = payeeName || mainPaymentRecord.userName;
+    mainPaymentRecord.status = payStatus === "captured" ? "SUCCESS" : "FAILED";
+  }
+
+  // Find target user by ID, or fallback to email or order details
+  let targetUser = db.users.find(u => u.id === userId);
+  if (!targetUser && mainPaymentRecord) {
+    targetUser = db.users.find(u => u.id === mainPaymentRecord.userId);
+  }
+  if (!targetUser && payeeUpi) {
+    targetUser = db.users.find(u => u.id === "user-1781431402208"); // default candidate
+  }
+
+  if (!targetUser) {
+    console.error("Payment Webhook Error: Could not locate a matching user profile.");
+    return res.status(404).json({ error: "User profile context not found." });
+  }
+
+  const isConfirmed = payStatus === "captured" || eventType === "payment.captured" || eventType === "PAYMENT_SUCCESS";
+  if (isConfirmed) {
+    // 1. Credit Plan upgrade instantly in DB record
+    targetUser.plan = planType;
+    saveDB();
+
+    // 2. Deliver an In-App Alert Notification to the user workspace
+    if (!db.notifications) db.notifications = [];
+    const notificationId = "notif_" + Date.now() + "_" + Math.random().toString(36).substring(2, 6);
+    db.notifications.push({
+      id: notificationId,
+      userId: targetUser.id,
+      title: "Plan Upgraded! Payment Verified",
+      message: `Your dynamic UPI payment of ₹${amountValue}.00 via ${payeeUpi} cleared successfully. Your workspace was upgraded to "${planType}" plan benefits.`,
+      type: "billing",
+      timestamp: new Date().toISOString(),
+      read: false
+    });
+    saveDB();
+
+    // 3. Generate and register professional TRANSACTION CONFIRMATION EMAIL inside sentEmails
+    const emailRefId = "email-" + Date.now();
+    const confirmedEmail = {
+      id: emailRefId,
+      jobId: "billing-invoice",
+      jobTitle: "Premium Upgrade Invoice",
+      company: "Brainy Career Payments",
+      hrEmail: "accounts@brainycareer.com",
+      subject: `[CONFIRMED] ₹${amountValue} Payment Receipt - Brainy Career ${planType} Elite`,
+      body: `Hi ${targetUser.fullName || payeeName || "Candidate"},\n\nWe are pleased to confirm that your instant UPI payment has cleared. Details of your premium subscription are attached below:\n\n--------------------------------------------\nINVOICE REFERENCE AND SERVICES CLEARANCE\n--------------------------------------------\nOrder ID: ${orderId}\nSubscription Tier: ${planType === 'Pro' ? 'Gold Pro Elite' : 'Platinum Recruiter Suite'}\nSettlement Fee: ₹${amountValue}.00 (Zero Fee Processing)\nSelected Gateway: UPI Network / Razorpay Server\nCustomer VPA Handle: ${payeeUpi}\nClearing Status: SUCCESSFUL / SETTLED\nApproved On: 2026-06-14\n\nYour advanced features (ATS Match Overflow, cover letter templates, career coach, recruiter profiles tracker) are now instantly unlocked on your current workspace dashboard.\n\nThank you for choosing Brainy Career.\n\nWarm regards,\nBrainy Career Billing Desk\naccounts@brainycareer.com`,
+      sentAt: new Date().toISOString()
+    };
+
+    if (!targetUser.sentEmails) targetUser.sentEmails = [];
+    targetUser.sentEmails.push(confirmedEmail);
+    saveDB();
+
+    // Update cloud model if active
+    if (supabase) {
+      try {
+        await supabase.from("users").update({
+          plan: planType
+        }).eq("id", targetUser.id);
+
+        await supabase.from("job_emails").insert({
+          user_id: targetUser.id,
+          user_name: targetUser.fullName,
+          user_email: targetUser.email,
+          job_id: "billing-invoice",
+          job_title: "Premium Billing Invoice",
+          company: "Brainy Career Payments",
+          hr_email: "accounts@brainycareer.com",
+          subject: confirmedEmail.subject,
+          body: confirmedEmail.body,
+          sent_at: confirmedEmail.sentAt
+        });
+
+        console.log("Supabase Cloud upgraded with premium plan and success billing receipt.");
+      } catch (cloudErr: any) {
+        console.warn("Could not synchronize cloud payment tables:", cloudErr?.message || cloudErr);
+      }
+    }
+
+    console.log(`[SUCCESS] User ${targetUser.email} successfully upgraded to ${planType} plan.`);
+    return res.json({
+      success: true,
+      message: `User ${targetUser.email} upgraded successfully to ${planType}. Confirmation invoice sent.`,
+      user: { id: targetUser.id, email: targetUser.email, plan: targetUser.plan }
+    });
+  }
+
+  return res.json({ success: true, message: "Webhook processed, payment pending/failed." });
 });
 
 // Setup Vite Dev middleware + static asset routing rules

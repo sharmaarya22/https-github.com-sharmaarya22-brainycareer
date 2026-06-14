@@ -13,9 +13,18 @@ export default function SkillRadarChart({
   missingSkills = [],
   jobTitle = ""
 }: SkillRadarChartProps) {
+  // Safe Array Pre-flight guards
+  const safeReqs = Array.isArray(requirements) 
+    ? requirements 
+    : typeof requirements === 'string'
+      ? (requirements as string).split(',').map(s => s.trim()).filter(Boolean)
+      : [];
+  const safeMatching = Array.isArray(matchingSkills) ? matchingSkills : [];
+  const safeMissing = Array.isArray(missingSkills) ? missingSkills : [];
+
   // Ensure we have a sensible set of skills to plot (ideally 5 to 6)
   // We'll extract and truncate the requirements, ensuring we have between 4 and 7 dimensions
-  const rawSkills = requirements.length > 0 ? requirements : ['Coding', 'System Design', 'Communication', 'Collaborative', 'Tooling'];
+  const rawSkills = safeReqs.length > 0 ? safeReqs : ['Coding', 'System Design', 'Communication', 'Collaborative', 'Tooling'];
   
   // Truncate and clean skill names for clean display labels
   const axisSkills = rawSkills.map(s => {
@@ -55,8 +64,8 @@ export default function SkillRadarChart({
     // Match against user matchingSkills or missingSkills
     const lowerAxis = axisSkill.toLowerCase();
     
-    const isMatching = matchingSkills.some(m => m.toLowerCase().includes(lowerAxis) || lowerAxis.includes(m.toLowerCase())) ||
-                       requirements[idx] && matchingSkills.some(m => m.toLowerCase().includes(requirements[idx].toLowerCase()));
+    const isMatching = safeMatching.some(m => m.toLowerCase().includes(lowerAxis) || lowerAxis.includes(m.toLowerCase())) ||
+                       (safeReqs[idx] && safeMatching.some(m => m.toLowerCase().includes(safeReqs[idx].toLowerCase())));
     
     return isMatching ? 95 : 25;
   });

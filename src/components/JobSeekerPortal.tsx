@@ -42,6 +42,30 @@ CORE EXPERTISE:
   }
 };
 
+function PremiumLockPlaceholder({ featureName, onGoToPricing }: { featureName: string; onGoToPricing: () => void }) {
+  return (
+    <div className="border border-amber-200 bg-amber-50/40 rounded-3xl p-8 text-center max-w-lg mx-auto my-12 space-y-5 shadow-xs font-sans">
+      <div className="inline-flex p-4 bg-amber-100 rounded-full text-amber-600 border border-amber-200">
+        <Sparkles className="w-8 h-8 animate-pulse" />
+      </div>
+      <div className="space-y-2">
+        <h3 className="text-lg font-black text-slate-900 tracking-tight">Unlock {featureName}</h3>
+        <p className="text-xs text-slate-500 font-semibold leading-relaxed max-w-sm mx-auto">
+          The {featureName} is a premium Gold Pro Elite capability. Complete your instant UPI clearance upgrade to Gold Pro for only ₹249/month to access!
+        </p>
+      </div>
+      <div>
+        <button
+          onClick={onGoToPricing}
+          className="px-6 py-2.5 bg-amber-500 hover:bg-amber-650 text-white rounded-xl text-xs font-black transition-all cursor-pointer shadow-md border hover:border-amber-600"
+        >
+          Upgrade to Gold Pro (INR 249)
+        </button>
+      </div>
+    </div>
+  );
+}
+
 interface JobSeekerPortalProps {
   user: User;
   token: string;
@@ -58,6 +82,8 @@ interface JobSeekerPortalProps {
   onUploadResume: (fileContent: { text?: string; base64?: string }, fileName: string) => Promise<void>;
   uploadingResume: boolean;
   onShowToast?: (title: string, message: string) => void;
+  currentPlan?: 'Free' | 'Pro' | 'Enterprise';
+  onNavigatePricing?: () => void;
 }
 
 export default function JobSeekerPortal({ 
@@ -75,7 +101,9 @@ export default function JobSeekerPortal({
   onRefreshTelemetry,
   onUploadResume,
   uploadingResume,
-  onShowToast
+  onShowToast,
+  currentPlan = 'Free',
+  onNavigatePricing
 }: JobSeekerPortalProps) {
   
   const [seekerTab, setSeekerTab] = useState<'jobs' | 'match' | 'resume' | 'letters' | 'interview' | 'tracker' | 'coach' | 'visitors'>('match');
@@ -110,6 +138,7 @@ export default function JobSeekerPortal({
   // Job Board Search/Filters
   const [searchTerm, setSearchTerm] = useState('');
   const [locModel, setLocModel] = useState<'Remote' | 'Hybrid' | 'Onsite' | 'All'>('All');
+  const [postedTimeFilter, setPostedTimeFilter] = useState<'any' | '24h' | 'week' | 'month'>('any');
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
   
   // Resume Builder States
@@ -401,24 +430,66 @@ ${user.fullName}
     }
   };
 
-  // Open apply simulator modal
-  const handleOpenApplySim = (job: Job) => {
-    setApplyModalJob(job);
-    setApplySimulateSuccess(false);
-    setApplySimulatedCVText(`
-Tailored CV Coordinates for ${user.fullName}
-Role Benchmark: ${job.title} at ${job.company}
-ATS Alignment score: 94%
+  // Open direct external apply and log background tracking
+  const handleOpenApplySim = async (job: Job) => {
+    try {
+      // 1. Dispatch background click tracking
+      await fetch(`/api/jobs/${job.id}/click`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
 
-SKILLS APPLIED: ${job.requirements.slice(0, 4).join(', ')}
-EXPERIENCE HIGHLIGHT: Specialized development.
-    `.trim());
-    
-    setApplyCustomLetter(`
-Dear ${job.company} Talent Acquisition Team,
+      // 2. Dispatch background recruiter dashboard sync tracking
+      const match = matches.find(m => m.jobId === job.id);
+      const score = match ? match.score : 85;
+      await fetch(`/api/jobs/${job.id}/apply`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          coverLetter: `Applied via original/external platform redirection. Logged and tracked using unified system credentials with automated AI Fit rating of ${score}%.`
+        })
+      });
 
-Please find my customized full-stack credentials enclosed for your immediate consideration for ${job.title}. This represents a strong match.
-    `.trim());
+      // 3. Mark job as applied and refresh global telemetry state
+      onRefreshTelemetry();
+
+      // 4. Append to Seeker Kanban workspace
+      setKanbanCards(prev => {
+        const urlToParse = (job.originalUrl || "").toLowerCase();
+        const sourceName = urlToParse.includes("linkedin") ? "LinkedIn" : urlToParse.includes("naukri") ? "Naukri" : "External Portal";
+        const alreadyExists = prev.some(c => c.jobId === job.id);
+        if (alreadyExists) return prev;
+        return [
+          {
+            id: `k-portal-${Date.now()}`,
+            jobId: job.id,
+            jobTitle: job.title,
+            company: job.company,
+            source: sourceName,
+            status: "Applied"
+          },
+          ...prev
+        ];
+      });
+
+      // 5. Trigger notifications telemetry refresh
+      onRefreshTelemetry();
+
+      // Show temporary elegant, professional non-blocking visual feedback alert
+      const portalUrl = getPortalJobUrl(job);
+      alert(`🚀 Opening Career Portal for ${job.company}!\n\nYour profile has been shared, analyzed, and synced with the employer successfully.\nRef URL: ${portalUrl}`);
+
+      // 6. Navigate directly
+      window.open(portalUrl, '_blank');
+
+    } catch (err) {
+      console.error("Direct application redirection and tracking failed:", err);
+      // Fallback
+      window.open(getPortalJobUrl(job), '_blank');
+    }
   };
 
   const handleTriggerApplicationSubmit = async () => {
@@ -719,7 +790,22 @@ Please find my customized full-stack credentials enclosed for your immediate con
                           job.company.toLowerCase().includes(searchTerm.toLowerCase()) ||
                           job.description.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesLoc = locModel === 'All' ? true : job.locationModel === locModel;
-    return matchesSearch && matchesLoc;
+
+    let matchesTime = true;
+    if (postedTimeFilter !== 'any') {
+      if (currentPlan === 'Free') {
+        matchesTime = true; // dropdown handler blocks selection, this is safe fallback
+      } else {
+        const postDate = new Date(job.postedDate);
+        const diffMs = Date.now() - postDate.getTime();
+        const diffDays = diffMs / (1000 * 60 * 60 * 24);
+        if (postedTimeFilter === '24h') matchesTime = diffDays <= 1;
+        else if (postedTimeFilter === 'week') matchesTime = diffDays <= 7;
+        else if (postedTimeFilter === 'month') matchesTime = diffDays <= 30;
+      }
+    }
+
+    return matchesSearch && matchesLoc && matchesTime;
   });
 
   return (
@@ -784,7 +870,7 @@ Please find my customized full-stack credentials enclosed for your immediate con
                   </div>
                   <h3 className="text-xl font-bold text-slate-900">Your Automated Worldwide Career Matchmaker is Ready</h3>
                   <p className="text-sm text-slate-650 max-w-xl leading-relaxed font-semibold">
-                    NexGen AI automatically indexes corporate vacancy portals worldwide to evaluate skill overlaps, compute ATS alignments, and gauge interview success likelihoods. Choose one of our elite presets or upload your own CV file to start.
+                    BrainyCareer.com automatically indexes corporate vacancy portals worldwide to evaluate skill overlaps, compute ATS alignments, and gauge interview success likelihoods. Choose one of our elite presets or upload your own CV file to start.
                   </p>
                 </div>
 
@@ -1040,7 +1126,7 @@ Please find my customized full-stack credentials enclosed for your immediate con
           <div className="space-y-5">
             
             {/* Search and location model filter controls */}
-            <div className="flex flex-col md:flex-row gap-4 items-stretch md:items-center bg-white p-4 rounded-2xl border border-slate-200">
+            <div className="flex flex-col xl:flex-row gap-4 items-stretch xl:items-center bg-white p-4 rounded-2xl border border-slate-200">
               <div className="flex items-center gap-2 bg-slate-50 p-2.5 px-4 rounded-xl border border-slate-200 flex-1">
                 <Search className="w-5 h-5 text-slate-400 shrink-0" />
                 <input
@@ -1052,20 +1138,53 @@ Please find my customized full-stack credentials enclosed for your immediate con
                 />
               </div>
 
-              <div className="flex gap-2 shrink-0">
-                {['All', 'Remote', 'Hybrid', 'Onsite'].map(mode => (
-                  <button
-                    key={mode}
-                    onClick={() => setLocModel(mode as any)}
-                    className={`px-4 py-2 rounded-xl text-xs font-bold cursor-pointer transition-all border ${
-                      locModel === mode 
-                        ? 'border-indigo-600 bg-indigo-50 text-indigo-700' 
-                        : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
-                    }`}
+              <div className="flex flex-wrap items-center gap-4">
+                <div className="flex gap-1.5 shrink-0">
+                  {['All', 'Remote', 'Hybrid', 'Onsite'].map(mode => (
+                    <button
+                      key={mode}
+                      onClick={() => setLocModel(mode as any)}
+                      className={`px-3.5 py-2 rounded-xl text-xs font-bold cursor-pointer transition-all border ${
+                        locModel === mode 
+                          ? 'border-indigo-600 bg-indigo-50 text-indigo-700 font-extrabold' 
+                          : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                      }`}
+                    >
+                      {mode}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="h-4 w-px bg-slate-200 hidden xl:block"></div>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="text-[10px] uppercase font-bold text-slate-400 font-mono tracking-wider">Date Posted:</span>
+                  <select
+                    value={postedTimeFilter}
+                    onChange={(e) => {
+                      const val = e.target.value as any;
+                      if (val !== 'any' && currentPlan === 'Free') {
+                        if (onShowToast) {
+                          onShowToast(
+                            "Gold Pro Feature Only",
+                            "Filtering jobs by past 24 hours, week, or month post age is a Gold Pro Elite perk. Upgrade to gain instant access!"
+                          );
+                        }
+                        if (onNavigatePricing) {
+                          onNavigatePricing();
+                        }
+                        return;
+                      }
+                      setPostedTimeFilter(val);
+                    }}
+                    className="bg-slate-50 border border-slate-200 text-xs font-bold rounded-xl px-3 py-2 text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
                   >
-                    {mode}
-                  </button>
-                ))}
+                    <option value="any">⏳ Anytime</option>
+                    <option value="24h">✨ Past 24h (Gold Pro)</option>
+                    <option value="week">📅 Past Week (Gold Pro)</option>
+                    <option value="month">📊 Past Month (Gold Pro)</option>
+                  </select>
+                </div>
               </div>
             </div>
 
@@ -1329,12 +1448,7 @@ Please find my customized full-stack credentials enclosed for your immediate con
           onRefreshTelemetry={onRefreshTelemetry}
           token={token}
           onApplyRedirect={(job) => {
-            setPortalSimulatorJob(job);
-            setExternalFlowMode('choice');
-            setPortalFullName(user.fullName || '');
-            setPortalEmail(user.email || '');
-            setPortalSuccess(false);
-            setPortalCoverLetterText(`Dear Hiring Team,\n\nI am extremely excited to apply for the ${job.title} position at ${job.company}. Based on my background in professional engineering projects and related certifications, I believe I am a wonderful fit for this vacancy.\n\nBest regards,\n${user.fullName || 'Applicant'}`);
+            handleOpenApplySim(job);
           }}
         />
       )}
@@ -1476,7 +1590,14 @@ Please find my customized full-stack credentials enclosed for your immediate con
         </div>
       )}
 
-      {seekerTab === 'letters' && (
+      {seekerTab === 'letters' && currentPlan === 'Free' && (
+        <PremiumLockPlaceholder 
+          featureName="AI Cover Letter Studio" 
+          onGoToPricing={onNavigatePricing || (() => {})} 
+        />
+      )}
+
+      {seekerTab === 'letters' && currentPlan !== 'Free' && (
         <div className="border border-slate-200 bg-white rounded-3xl p-6 space-y-6 shadow-sm">
           <div className="pb-4 border-b border-slate-100">
             <span className="text-[10px] uppercase font-bold text-indigo-600 tracking-wider font-mono">
@@ -1594,7 +1715,14 @@ Please find my customized full-stack credentials enclosed for your immediate con
         </div>
       )}
 
-      {seekerTab === 'interview' && (
+      {seekerTab === 'interview' && currentPlan === 'Free' && (
+        <PremiumLockPlaceholder 
+          featureName="Interactive Interview Coach" 
+          onGoToPricing={onNavigatePricing || (() => {})} 
+        />
+      )}
+
+      {seekerTab === 'interview' && currentPlan !== 'Free' && (
         <div className="border border-slate-200 bg-white rounded-3xl p-6 space-y-6 shadow-sm">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-4 border-b border-slate-100">
             <div>
@@ -1792,7 +1920,14 @@ Please find my customized full-stack credentials enclosed for your immediate con
         </div>
       )}
 
-      {seekerTab === 'coach' && (
+      {seekerTab === 'coach' && currentPlan === 'Free' && (
+        <PremiumLockPlaceholder 
+          featureName="24/7 AI Career Coach" 
+          onGoToPricing={onNavigatePricing || (() => {})} 
+        />
+      )}
+
+      {seekerTab === 'coach' && currentPlan !== 'Free' && (
         <div className="border border-slate-200 bg-white rounded-3xl p-6 space-y-6 shadow-sm">
           <div className="pb-4 border-b border-slate-100">
             <span className="text-[10px] uppercase font-bold text-indigo-600 tracking-wider font-mono block">
@@ -1871,7 +2006,14 @@ Please find my customized full-stack credentials enclosed for your immediate con
         </div>
       )}
 
-      {seekerTab === 'visitors' && (
+      {seekerTab === 'visitors' && currentPlan === 'Free' && (
+        <PremiumLockPlaceholder 
+          featureName="Who Viewed My Profile" 
+          onGoToPricing={onNavigatePricing || (() => {})} 
+        />
+      )}
+
+      {seekerTab === 'visitors' && currentPlan !== 'Free' && (
         <div className="space-y-6">
           {/* Analytics Banner */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
@@ -2318,7 +2460,12 @@ Please find my customized full-stack credentials enclosed for your immediate con
                         <div className="space-y-2">
                           <h4 className="text-[10px] uppercase font-mono font-bold tracking-widest text-emerald-400">Core Tech Specifications</h4>
                           <ul className="space-y-1.5">
-                            {portalSimulatorJob.requirements?.map((req, idx) => (
+                            {(Array.isArray(portalSimulatorJob.requirements) 
+                              ? portalSimulatorJob.requirements 
+                              : typeof portalSimulatorJob.requirements === 'string'
+                                ? (portalSimulatorJob.requirements as string).split(',').map(s => s.trim()).filter(Boolean)
+                                : []
+                            ).map((req, idx) => (
                               <li key={idx} className="flex items-start gap-2 text-xs text-slate-300">
                                 <span className="text-emerald-400 shrink-0 mt-1">•</span>
                                 <span>{req}</span>
@@ -2329,7 +2476,12 @@ Please find my customized full-stack credentials enclosed for your immediate con
                         <div className="space-y-2">
                           <h4 className="text-[10px] uppercase font-mono font-bold tracking-widest text-violet-400">Key Roles & Responsibilities</h4>
                           <ul className="space-y-1.5">
-                            {portalSimulatorJob.responsibilities?.map((resp, idx) => (
+                            {(Array.isArray(portalSimulatorJob.responsibilities) 
+                              ? portalSimulatorJob.responsibilities 
+                              : typeof portalSimulatorJob.responsibilities === 'string'
+                                ? (portalSimulatorJob.responsibilities as string).split(',').map(s => s.trim()).filter(Boolean)
+                                : []
+                            ).map((resp, idx) => (
                               <li key={idx} className="flex items-start gap-2 text-xs text-slate-300">
                                 <span className="text-violet-400 shrink-0 mt-1">•</span>
                                 <span>{resp}</span>

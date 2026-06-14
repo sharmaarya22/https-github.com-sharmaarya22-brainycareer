@@ -19,6 +19,8 @@ interface JobMatchProps {
   token: string;
   onApplyRedirect?: (job: Job) => void;
   appliedJobs?: string[];
+  currentPlan?: 'Free' | 'Pro' | 'Enterprise';
+  onNavigatePricing?: () => void;
 }
 
 // Preset resume templates to make it plug-and-play
@@ -62,12 +64,15 @@ export default function JobMatch({
   onRefreshTelemetry,
   token,
   onApplyRedirect,
-  appliedJobs = []
+  appliedJobs = [],
+  currentPlan = 'Free',
+  onNavigatePricing
 }: JobMatchProps) {
 
   const [searchTerm, setSearchTerm] = useState('');
   const [matchTier, setMatchTier] = useState<'All' | 'Elite' | 'High' | 'Moderate'>('All');
   const [locFilter, setLocFilter] = useState<'All' | 'Remote' | 'Hybrid' | 'Onsite'>('All');
+  const [postedFilter, setPostedFilter] = useState<'All' | '24h' | 'week' | 'month'>('All');
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   
   // Custom states for simulation
@@ -173,7 +178,7 @@ export default function JobMatch({
   }, [matches]);
 
   // Filter listings based on user credentials
-  const filteredMatches = useMemo(() => {
+  const filteredMatchesTotal = useMemo(() => {
     return matches.filter(m => {
       const matchSearch = m.job.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
                           m.job.company.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -187,9 +192,25 @@ export default function JobMatch({
       else if (matchTier === 'High') matchScoreTier = m.score >= 75 && m.score < 85;
       else if (matchTier === 'Moderate') matchScoreTier = m.score >= 60 && m.score < 75;
 
-      return matchSearch && matchLoc && matchScoreTier;
+      let matchPosted = true;
+      if (postedFilter !== 'All' && m.job.postedDate) {
+        const today = new Date('2026-06-14');
+        const posted = new Date(m.job.postedDate);
+        const diffDays = (today.getTime() - posted.getTime()) / (1000 * 60 * 60 * 24);
+        if (postedFilter === '24h') matchPosted = diffDays <= 1;
+        else if (postedFilter === 'week') matchPosted = diffDays <= 7;
+        else if (postedFilter === 'month') matchPosted = diffDays <= 30;
+      }
+
+      return matchSearch && matchLoc && matchScoreTier && matchPosted;
     }).sort((a, b) => b.score - a.score);
-  }, [matches, searchTerm, locFilter, matchTier]);
+  }, [matches, searchTerm, locFilter, matchTier, postedFilter]);
+
+  const filteredMatches = useMemo(() => {
+    return currentPlan === 'Free' ? filteredMatchesTotal.slice(0, 5) : filteredMatchesTotal;
+  }, [filteredMatchesTotal, currentPlan]);
+
+  const isMatchesListCapped = currentPlan === 'Free' && filteredMatchesTotal.length > 5;
 
   // Handle auto-selected job
   React.useEffect(() => {
@@ -352,76 +373,111 @@ ${user.fullName || "Aura Candidate"}`;
           </div>
 
           {/* CRITICAL TWO-WAY CONTROL FILTER PANEL */}
-          <div className="bg-white border border-slate-200 p-4 rounded-2xl flex flex-col lg:flex-row justify-between gap-4 shadow-sm">
+          <div className="bg-white border border-slate-200 p-4 rounded-2xl space-y-3 shadow-sm">
             
-            <div className="flex-1 flex flex-col sm:flex-row gap-3">
-              <div className="flex-1 flex items-center gap-2 bg-slate-50 p-2.5 px-3.5 rounded-xl border border-slate-200">
-                <Search className="w-4 h-4 text-slate-400 shrink-0" />
-                <input
-                  type="text"
-                  placeholder="Identify role requirements, matching skills or gaps..."
-                  value={searchTerm}
-                  onChange={e => setSearchTerm(e.target.value)}
-                  className="w-full bg-transparent text-xs text-slate-800 focus:outline-none placeholder-slate-400 font-medium"
-                />
+            <div className="flex flex-col lg:flex-row justify-between gap-4">
+              <div className="flex-1 flex flex-col sm:flex-row gap-3">
+                <div className="flex-1 flex items-center gap-2 bg-slate-50 p-2.5 px-3.5 rounded-xl border border-slate-200">
+                  <Search className="w-4 h-4 text-slate-400 shrink-0" />
+                  <input
+                    type="text"
+                    placeholder="Identify role requirements, matching skills or gaps..."
+                    value={searchTerm}
+                    onChange={e => setSearchTerm(e.target.value)}
+                    className="w-full bg-transparent text-xs text-slate-800 focus:outline-none placeholder-slate-400 font-medium"
+                  />
+                </div>
+
+                <div className="flex gap-1 bg-slate-50 p-1 rounded-xl border border-slate-200">
+                  {[
+                    { id: 'All', label: 'All Models' },
+                    { id: 'Remote', label: 'Remote' },
+                    { id: 'Hybrid', label: 'Hybrid' },
+                    { id: 'Onsite', label: 'Onsite' }
+                  ].map(item => (
+                    <button
+                      key={item.id}
+                      onClick={() => setLocFilter(item.id as any)}
+                      className={`px-3 py-1.5 rounded-lg text-[10.5px] font-bold transition-all cursor-pointer ${
+                        locFilter === item.id 
+                          ? 'bg-indigo-600 text-white font-extrabold shadow-sm' 
+                          : 'text-slate-500 hover:text-slate-800'
+                      }`}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
               </div>
 
-              <div className="flex gap-1 bg-slate-50 p-1 rounded-xl border border-slate-200">
-                {[
-                  { id: 'All', label: 'All Models' },
-                  { id: 'Remote', label: 'Remote' },
-                  { id: 'Hybrid', label: 'Hybrid' },
-                  { id: 'Onsite', label: 'Onsite' }
-                ].map(item => (
-                  <button
-                    key={item.id}
-                    onClick={() => setLocFilter(item.id as any)}
-                    className={`px-3 py-1.5 rounded-lg text-[10.5px] font-bold transition-all cursor-pointer ${
-                      locFilter === item.id 
-                        ? 'bg-indigo-600 text-white font-extrabold shadow-sm' 
-                        : 'text-slate-500 hover:text-slate-800'
-                    }`}
-                  >
-                    {item.label}
-                  </button>
-                ))}
+              <div className="flex gap-2">
+                <div className="flex gap-1 bg-slate-50 p-1 rounded-xl border border-slate-200 text-[10.5px] font-bold text-slate-500 shrink-0">
+                  {[
+                    { id: 'All', label: 'All Matches' },
+                    { id: 'Elite', label: 'Elite (85%+)' },
+                    { id: 'High', label: 'High (75%+)' },
+                    { id: 'Moderate', label: 'Moderate' }
+                  ].map(tier => (
+                    <button
+                      key={tier.id}
+                      onClick={() => setMatchTier(tier.id as any)}
+                      className={`px-2.5 py-1.5 rounded-lg transition-all cursor-pointer ${
+                        matchTier === tier.id 
+                          ? 'bg-indigo-50 text-indigo-700 font-extrabold border border-indigo-200' 
+                          : 'border border-transparent hover:text-slate-800'
+                      }`}
+                    >
+                      {tier.label}
+                    </button>
+                  ))}
+                </div>
+
+                <button 
+                  onClick={() => {
+                    setSearchTerm('');
+                    setMatchTier('All');
+                    setLocFilter('All');
+                    setPostedFilter('All');
+                  }}
+                  className="p-2 border border-slate-250 hover:bg-slate-50 bg-white text-xs text-slate-600 font-bold rounded-xl transition-all cursor-pointer"
+                  title="Reset Filters"
+                >
+                  Clear
+                </button>
               </div>
             </div>
 
-            <div className="flex gap-2">
-              <div className="flex gap-1 bg-slate-50 p-1 rounded-xl border border-slate-200 text-[10.5px] font-bold text-slate-500 shrink-0">
-                {[
-                  { id: 'All', label: 'All Matches' },
-                  { id: 'Elite', label: 'Elite (85%+)' },
-                  { id: 'High', label: 'High (75%+)' },
-                  { id: 'Moderate', label: 'Moderate' }
-                ].map(tier => (
-                  <button
-                    key={tier.id}
-                    onClick={() => setMatchTier(tier.id as any)}
-                    className={`px-2.5 py-1.5 rounded-lg transition-all cursor-pointer ${
-                      matchTier === tier.id 
-                        ? 'bg-indigo-50 text-indigo-700 font-extrabold border border-indigo-200' 
-                        : 'border border-transparent hover:text-slate-800'
-                    }`}
-                  >
-                    {tier.label}
-                  </button>
-                ))}
+            {/* SECOND ROW: POSTED DATE FILTER */}
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-3 text-[11px] font-sans">
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-slate-400 uppercase tracking-wider text-[9px] font-mono">Posted:</span>
+                <div className="flex gap-1 bg-slate-50 p-1 rounded-xl border border-slate-200">
+                  {[
+                    { id: 'All', label: 'Anytime' },
+                    { id: '24h', label: 'Past 24 Hours' },
+                    { id: 'week', label: 'Past Week' },
+                    { id: 'month', label: 'Past Month' }
+                  ].map(period => (
+                    <button
+                      key={period.id}
+                      onClick={() => setPostedFilter(period.id as any)}
+                      className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${
+                        postedFilter === period.id 
+                          ? 'bg-indigo-600 text-white font-extrabold shadow-sm' 
+                          : 'text-slate-500 hover:text-slate-850'
+                      }`}
+                    >
+                      {period.label}
+                    </button>
+                  ))}
+                </div>
               </div>
 
-              <button 
-                onClick={() => {
-                  setSearchTerm('');
-                  setMatchTier('All');
-                  setLocFilter('All');
-                }}
-                className="p-2 border border-slate-250 hover:bg-slate-50 bg-white text-xs text-slate-600 font-bold rounded-xl transition-all cursor-pointer"
-                title="Reset Filters"
-              >
-                Clear
-              </button>
+              <div className="text-slate-500 text-[10.5px] font-mono font-medium">
+                Found <strong className="text-indigo-600">{filteredMatches.length} matching</strong> profiles ({currentPlan} Plan)
+              </div>
             </div>
+
           </div>
 
           {/* MASTER SPLIT LAYOUT PANEL */}
@@ -548,15 +604,18 @@ ${user.fullName || "Aura Candidate"}`;
 
                           <div className="flex items-center justify-between text-[9px] text-slate-500 font-mono mt-1 px-1 border-t border-slate-205 pt-2">
                             <span>Accuracyfit: {match.score}%</span>
-                            <a
-                              href={job.originalUrl !== '#' ? job.originalUrl : `https://careers.${job.company.toLowerCase().replace(/[^a-z0-9]/g, '')}.com/jobs/${job.id}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-indigo-600 font-bold hover:underline cursor-pointer flex items-center gap-0.5 inline-flex"
+                            <button
+                              onClick={(e) => {
+                                e.preventDefault();
+                                if (onApplyRedirect) {
+                                  onApplyRedirect(job);
+                                }
+                              }}
+                              className="text-indigo-600 font-bold hover:underline cursor-pointer flex items-center gap-0.5 inline-flex bg-transparent border-none p-0 text-[10px]"
                             >
                               <span>Redirect Job Portal</span>
                               <ArrowRight className="w-2.5 h-2.5" />
-                            </a>
+                            </button>
                           </div>
                         </div>
                       )}
@@ -566,6 +625,23 @@ ${user.fullName || "Aura Candidate"}`;
               ) : (
                 <div className="p-8 text-center bg-slate-50 border border-dashed border-slate-200 rounded-2xl text-slate-400 text-xs font-semibold">
                   No matching jobs found within configured parameters. Check spelling guidelines.
+                </div>
+              )}
+
+              {isMatchesListCapped && (
+                <div className="p-4 bg-gradient-to-r from-amber-50 to-amber-100/50 border border-amber-205 rounded-xl text-center space-y-2 mt-2">
+                  <p className="text-[10.5px] font-bold text-slate-750">
+                    🔒 Viewing top 5 matches on Bronze Free Plan
+                  </p>
+                  <p className="text-[9.5px] text-slate-500 font-semibold leading-relaxed max-w-xs mx-auto">
+                    Upgrade your account to Gold Pro to view all remaining global matches, discover hidden salaries, and unlock smart integrations.
+                  </p>
+                  <button
+                    onClick={onNavigatePricing}
+                    className="px-4.5 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-[10px] font-black transition-all cursor-pointer shadow-sm border border-amber-400 block mx-auto font-sans"
+                  >
+                    Upgrade to Gold Pro (₹249)
+                  </button>
                 </div>
               )}
             </div>
@@ -764,7 +840,12 @@ ${user.fullName || "Aura Candidate"}`;
                     </div>
                     <div className="space-y-2">
                       <ul className="space-y-1.5 text-slate-605 font-semibold">
-                        {activeMatch.job.requirements.map((req, ridx) => (
+                        {(Array.isArray(activeMatch.job.requirements) 
+                          ? activeMatch.job.requirements 
+                          : typeof activeMatch.job.requirements === 'string'
+                            ? (activeMatch.job.requirements as string).split(',').map(s => s.trim()).filter(Boolean)
+                            : []
+                        ).map((req, ridx) => (
                           <li key={ridx} className="flex gap-2">
                             <span className="text-indigo-600 shrink-0 font-bold">•</span>
                             <span>{req}</span>

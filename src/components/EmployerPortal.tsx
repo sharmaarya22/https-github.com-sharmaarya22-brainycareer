@@ -345,8 +345,8 @@ export default function EmployerPortal({
     setNewModel(job.locationModel);
     setNewSalary(job.salaryRange);
     setNewDesc(job.description);
-    setNewReqs(job.requirements.join(", "));
-    setNewTags(job.tags.join(", "));
+    setNewReqs(Array.isArray(job.requirements) ? job.requirements.join(", ") : typeof job.requirements === 'string' ? job.requirements : "");
+    setNewTags(Array.isArray(job.tags) ? job.tags.join(", ") : typeof job.tags === 'string' ? job.tags : "");
     // Scroll form into focus or scroll to top
     window.scrollTo({ top: 150, behavior: 'smooth' });
   };
@@ -464,7 +464,12 @@ export default function EmployerPortal({
     const selectedJobObj = jobs.find(l => l.id === jobForQuestions) || jobs[0];
     if (!selectedJobObj) return;
 
-    const baseReqs = selectedJobObj.requirements || ["React", "TypeScript"];
+    const reqsArray = Array.isArray(selectedJobObj.requirements)
+      ? selectedJobObj.requirements
+      : typeof selectedJobObj.requirements === 'string'
+        ? (selectedJobObj.requirements as string).split(',').map(s => s.trim()).filter(Boolean)
+        : ["React", "TypeScript"];
+    const baseReqs = reqsArray.length > 0 ? reqsArray : ["React", "TypeScript"];
     setGeneratedQuestions([
       `Based on requirements for ${selectedJobObj.title}: Describe your practical experience managing ${baseReqs[0] || 'clean layouts'} in production environments.`,
       `How do you handle error propagation in asynchronous requests combining ${baseReqs[1] || 'Node API'} integrations?`,
