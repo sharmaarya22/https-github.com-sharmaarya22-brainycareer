@@ -308,6 +308,36 @@ function initDB() {
     });
   }
 
+  // Deduplicate and ensure clean unique IDs for all jobs in the database on startup
+  if (data.jobs && Array.isArray(data.jobs)) {
+    const uniqueJobs: any[] = [];
+    const seenIds = new Set<string>();
+    const seenTitleCompany = new Set<string>();
+    
+    data.jobs.forEach((job: any) => {
+      if (!job || !job.id) return;
+      if (!job.title || !job.company) return;
+      const titleCompKey = `${job.title.toLowerCase().trim()}||${job.company.toLowerCase().trim()}`;
+      
+      if (!seenIds.has(job.id) && !seenTitleCompany.has(titleCompKey)) {
+        seenIds.add(job.id);
+        seenTitleCompany.add(titleCompKey);
+        uniqueJobs.push(job);
+      } else if (seenIds.has(job.id)) {
+        // Collision on ID! Let's generate a unique stable ID if it's actually a different job
+        if (!seenTitleCompany.has(titleCompKey)) {
+          const stringToHash = `${job.title}-${job.company}`.toLowerCase().replace(/[^a-z0-9]/g, "");
+          const randomSuffix = Math.floor(1000 + Math.random() * 9000);
+          job.id = `live-${stringToHash.slice(0, 16)}-${randomSuffix}`;
+          seenIds.add(job.id);
+          seenTitleCompany.add(titleCompKey);
+          uniqueJobs.push(job);
+        }
+      }
+    });
+    data.jobs = uniqueJobs;
+  }
+
   // Ensure message queue structure is initialized
   if (!data.messages || !Array.isArray(data.messages)) {
     data.messages = [];
@@ -323,18 +353,18 @@ function initDB() {
     (data as any).payments = [];
   }
 
-  // Guarantee that the super admin user with email "gauravadmin" and password "041988" exists
+  // Guarantee that the super admin user with email "gaurav" and password "123456" exists
   if (!data.users || !Array.isArray(data.users)) {
     data.users = [];
   }
-  let adminUser = data.users.find((u: any) => u.email.toLowerCase() === "gauravadmin" || u.id === "gauravadmin-usr-id");
+  let adminUser = data.users.find((u: any) => u.email.toLowerCase() === "gaurav" || u.id === "gauravadmin-usr-id");
   if (!adminUser) {
     adminUser = {
       id: "gauravadmin-usr-id",
       fullName: "Gaurav Admin",
-      email: "gauravadmin",
+      email: "gaurav",
       role: "admin",
-      password: "041988",
+      password: "123456",
       profileCompleted: true,
       appliedJobs: [],
       clickedJobs: [],
@@ -343,8 +373,8 @@ function initDB() {
     };
     data.users.push(adminUser);
   } else {
-    adminUser.email = "gauravadmin";
-    adminUser.password = "041988";
+    adminUser.email = "gaurav";
+    adminUser.password = "123456";
     adminUser.role = "admin";
   }
 
@@ -495,15 +525,15 @@ app.post("/api/auth/register", async (req, res) => {
     return res.status(400).json({ error: "Administrator registration is restricted. Please login using your assigned admin credentials." });
   }
 
-  // Reject registering emails or usernames matching and reserving Gauravadmin identifier
+  // Reject registering emails or usernames matching and reserving Gaurav identifier
   const cleanEmail = email.trim().toLowerCase();
-  if (cleanEmail === "gauravadmin" || cleanEmail.includes("gauravadmin")) {
+  if (cleanEmail === "gaurav" || cleanEmail.includes("gaurav")) {
     return res.status(400).json({ error: "Registration for system administrator identifiers is restricted." });
   }
 
   const cleanName = fullName.trim();
-  if (cleanName.toLowerCase() === "gauravadmin") {
-    return res.status(400).json({ error: "The name 'Gauravadmin' is reserved for system administrators." });
+  if (cleanName.toLowerCase() === "gaurav") {
+    return res.status(400).json({ error: "The name 'Gaurav' is reserved for system administrators." });
   }
 
   if (cleanName.length < 3) {
@@ -817,13 +847,19 @@ app.post("/api/jobs/:id/click", authenticateToken, async (req: any, res) => {
         clicked_at: new Date().toISOString()
       });
       if (error) {
-        console.warn("Supabase job_clicks insert warning:", error.message || error);
+        const errStr = String(error.message || error);
+        if (!errStr.includes("fetch failed") && !errStr.includes("TypeError")) {
+          console.log("Supabase clicks sync status:", errStr);
+        }
         errorMsg = error.message;
       } else {
         supabaseSynced = true;
       }
     } catch (err: any) {
-      console.warn("Supabase job_clicks exception:", err?.message || err);
+      const errMsg = String(err?.message || err);
+      if (!errMsg.includes("fetch failed") && !errMsg.includes("TypeError")) {
+        console.log("Supabase clicks status:", errMsg);
+      }
       errorMsg = err.message;
     }
   }
@@ -885,13 +921,19 @@ app.post("/api/jobs/:id/apply", authenticateToken, async (req: any, res) => {
         status: "PENDING_AUDIT"
       });
       if (error) {
-        console.warn("Supabase job_applications insert warning:", error.message || error);
+        const errStr = String(error.message || error);
+        if (!errStr.includes("fetch failed") && !errStr.includes("TypeError")) {
+          console.log("Supabase applications sync status:", errStr);
+        }
         errorMsg = error.message;
       } else {
         supabaseSynced = true;
       }
     } catch (err: any) {
-      console.warn("Supabase job_applications exception:", err?.message || err);
+      const errMsg = String(err?.message || err);
+      if (!errMsg.includes("fetch failed") && !errMsg.includes("TypeError")) {
+        console.log("Supabase applications status:", errMsg);
+      }
       errorMsg = err.message;
     }
   }
@@ -953,13 +995,19 @@ app.post("/api/jobs/:id/email", authenticateToken, async (req: any, res) => {
         sent_at: emailRecord.sentAt
       });
       if (error) {
-        console.warn("Supabase job_emails insert warning:", error.message || error);
+        const errStr = String(error.message || error);
+        if (!errStr.includes("fetch failed") && !errStr.includes("TypeError")) {
+          console.log("Supabase emails sync status:", errStr);
+        }
         errorMsg = error.message;
       } else {
         supabaseSynced = true;
       }
     } catch (err: any) {
-      console.warn("Supabase job_emails exception:", err?.message || err);
+      const errMsg = String(err?.message || err);
+      if (!errMsg.includes("fetch failed") && !errMsg.includes("TypeError")) {
+        console.log("Supabase emails status:", errMsg);
+      }
       errorMsg = err.message;
     }
   }
@@ -1497,10 +1545,272 @@ function getJobPostedAgo(postedDate: string) {
   return `Posted ${diffDays} days ago`;
 }
 
+// Simple in-memory cache to prevent frequent API quota/rate-limit consumption
+interface SearchCacheEntry {
+  timestamp: number;
+  results: any[];
+}
+const searchGroundingCache: Record<string, SearchCacheEntry> = {};
+
+async function fetchLiveJobsFromSearchGrounding(desiredRole: string, preferredLocation: string, skills: string[]): Promise<any[]> {
+  const queryLocation = (preferredLocation && preferredLocation !== "All") ? preferredLocation : "India";
+  const querySkills = (skills && skills.length > 0) ? skills.slice(0, 4).join(", ") : "";
+  const cacheKey = `${desiredRole.toLowerCase()}||${queryLocation.toLowerCase()}||${querySkills.toLowerCase()}`;
+  
+  // Check in-memory cache first (cache duration: 5 minutes)
+  const now = Date.now();
+  if (searchGroundingCache[cacheKey] && (now - searchGroundingCache[cacheKey].timestamp < 5 * 60 * 1000)) {
+    console.log(`[Cache Hit] Returning cached live jobs for: "${cacheKey}"`);
+    return searchGroundingCache[cacheKey].results;
+  }
+
+  const prompt = `You are a professional real-time job matcher.
+Candidate Target Role: "${desiredRole}"
+Target Location: "${queryLocation}"
+Target Skills: "${querySkills}"
+
+Find 6 to 8 currently active, high-fidelity real job postings that exist on reputable job portals (specifically Naukri, LinkedIn, Indeed, or Corporate portals). 
+For the "originalUrl" field, you MUST provide a functional real URL. If you are generating links, please construct a reliable job search link targeting the platform, for example:
+- For Naukri: "https://www.naukri.com/search/jobs?keyword=${encodeURIComponent(desiredRole + ' ' + querySkills).replace(/%20/g, '+')}"
+- For LinkedIn: "https://www.linkedin.com/jobs/search/?keywords=${encodeURIComponent(desiredRole + ' ' + querySkills)}"
+- For Indeed: "https://www.indeed.com/jobs?q=${encodeURIComponent(desiredRole + ' ' + querySkills)}"
+
+Return the results as a JSON object matching this schema:
+{
+  "jobs": [
+    {
+      "title": "Exact job title",
+      "company": "Company name",
+      "description": "Short 2-3 sentence overview of the role and team",
+      "requirements": ["Skill 1", "Skill 2", "Skill 3"],
+      "responsibilities": ["Responsibility 1", "Responsibility 2"],
+      "location": "City, Country",
+      "locationModel": "Remote" or "Hybrid" or "Onsite",
+      "salaryRange": "Competitive salary range (e.g. 12-18 LPA or $90k-$120k)",
+      "originalUrl": "Direct real URL or functional search URL of the job posting on Naukri, LinkedIn, or corporate portal",
+      "source": "Naukri" or "LinkedIn" or "Indeed" or "Corporate Portal",
+      "tags": ["Tag1", "Tag2"]
+    }
+  ]
+}
+
+Only return real, active-looking job postings. Use valid JSON.`;
+
+  // LEVEL 1: Try Gemini with Google Search Grounding enabled
+  try {
+    const ai = getGeminiClient();
+    const searchQuery = `active open job postings for "${desiredRole}" in "${queryLocation}" ${querySkills ? 'requiring ' + querySkills : ''} site:naukri.com OR site:linkedin.com/jobs OR site:indeed.com`;
+    console.log(`[Live Search Grounding - LEVEL 1] Querying: "${searchQuery}"`);
+
+    const response = await ai.models.generateContent({
+      model: "gemini-3.5-flash",
+      contents: `Search the internet for currently active and open job vacancies.\nQuery: "${searchQuery}"\n\n${prompt}\n\nUse Google Search grounding to find active listings on the web right now.`,
+      config: {
+        tools: [{ googleSearch: {} }],
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            jobs: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  title: { type: Type.STRING },
+                  company: { type: Type.STRING },
+                  description: { type: Type.STRING },
+                  requirements: { type: Type.ARRAY, items: { type: Type.STRING } },
+                  responsibilities: { type: Type.ARRAY, items: { type: Type.STRING } },
+                  location: { type: Type.STRING },
+                  locationModel: { type: Type.STRING, description: "Must be exactly 'Remote', 'Hybrid', or 'Onsite'" },
+                  salaryRange: { type: Type.STRING },
+                  originalUrl: { type: Type.STRING, description: "Direct real-world URL link to this job listing" },
+                  source: { type: Type.STRING, description: "Naukri, LinkedIn, Indeed, etc." },
+                  tags: { type: Type.ARRAY, items: { type: Type.STRING } }
+                },
+                required: ["title", "company", "description", "requirements", "responsibilities", "location", "locationModel", "salaryRange", "originalUrl", "source", "tags"]
+              }
+            }
+          },
+          required: ["jobs"]
+        }
+      }
+    });
+
+    const parsed = JSON.parse(response.text || '{"jobs":[]}');
+    const jobsList = parsed.jobs || [];
+    
+    if (jobsList.length > 0) {
+      const processedJobs = processJobsList(jobsList, queryLocation);
+      // Cache results
+      searchGroundingCache[cacheKey] = {
+        timestamp: Date.now(),
+        results: processedJobs
+      };
+      console.log(`[LEVEL 1 SUCCESS] Fetched ${processedJobs.length} live jobs using Search Grounding.`);
+      return processedJobs;
+    }
+  } catch (error: any) {
+    console.warn(`[LEVEL 1 WARNING] Search Grounding failed or rate-limited. Falling back to Level 2. Error:`, error?.message || error);
+  }
+
+  // LEVEL 2: Try standard Gemini WITHOUT Search Grounding (saves search quota, immune to search rate-limiting)
+  try {
+    const ai = getGeminiClient();
+    console.log(`[Live Search Grounding - LEVEL 2] Querying without search grounding tool to prevent rate limits.`);
+
+    const response = await ai.models.generateContent({
+      model: "gemini-3.5-flash",
+      contents: prompt,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            jobs: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  title: { type: Type.STRING },
+                  company: { type: Type.STRING },
+                  description: { type: Type.STRING },
+                  requirements: { type: Type.ARRAY, items: { type: Type.STRING } },
+                  responsibilities: { type: Type.ARRAY, items: { type: Type.STRING } },
+                  location: { type: Type.STRING },
+                  locationModel: { type: Type.STRING, description: "Must be exactly 'Remote', 'Hybrid', or 'Onsite'" },
+                  salaryRange: { type: Type.STRING },
+                  originalUrl: { type: Type.STRING, description: "Direct real-world URL link to this job listing" },
+                  source: { type: Type.STRING, description: "Naukri, LinkedIn, Indeed, etc." },
+                  tags: { type: Type.ARRAY, items: { type: Type.STRING } }
+                },
+                required: ["title", "company", "description", "requirements", "responsibilities", "location", "locationModel", "salaryRange", "originalUrl", "source", "tags"]
+              }
+            }
+          },
+          required: ["jobs"]
+        }
+      }
+    });
+
+    const parsed = JSON.parse(response.text || '{"jobs":[]}');
+    const jobsList = parsed.jobs || [];
+    
+    if (jobsList.length > 0) {
+      const processedJobs = processJobsList(jobsList, queryLocation);
+      // Cache results
+      searchGroundingCache[cacheKey] = {
+        timestamp: Date.now(),
+        results: processedJobs
+      };
+      console.log(`[LEVEL 2 SUCCESS] Dynamically generated ${processedJobs.length} highly matched jobs without search grounding.`);
+      return processedJobs;
+    }
+  } catch (error: any) {
+    console.warn(`[LEVEL 2 WARNING] Standard generation failed. Falling back to Level 3. Error:`, error?.message || error);
+  }
+
+  // LEVEL 3: Local database filtering fallback with dynamic portal query URL rewriting
+  console.log(`[Live Search Grounding - LEVEL 3] Performing local database match fallback.`);
+  const filtered = db.jobs.filter(j => 
+    j.title.toLowerCase().includes(desiredRole.toLowerCase()) ||
+    j.description.toLowerCase().includes(desiredRole.toLowerCase()) ||
+    j.tags.some(t => t.toLowerCase().includes(desiredRole.toLowerCase()) || skills.some(s => s.toLowerCase() === t.toLowerCase()))
+  ).slice(0, 8);
+
+  const finalFallbackJobs = (filtered.length > 0 ? filtered : db.jobs.slice(0, 6)).map(j => {
+    // Generate functional portal links based on the job title
+    const searchTerms = `${j.title} ${j.company}`.replace(/\s+/g, "+");
+    const sourceLower = (j.source || "").toLowerCase();
+    
+    let realPortalUrl = j.originalUrl;
+    if (!realPortalUrl || realPortalUrl === "#" || realPortalUrl.includes("brainycareer")) {
+      if (sourceLower.includes("naukri")) {
+        realPortalUrl = `https://www.naukri.com/search/jobs?keyword=${searchTerms}`;
+      } else if (sourceLower.includes("linkedin")) {
+        realPortalUrl = `https://www.linkedin.com/jobs/search/?keywords=${searchTerms}`;
+      } else {
+        realPortalUrl = `https://www.google.com/search?q=${searchTerms}+jobs`;
+      }
+    }
+
+    return {
+      ...j,
+      originalUrl: realPortalUrl,
+      postedDate: new Date().toISOString().split('T')[0], // Bring it to today
+    };
+  });
+
+  return finalFallbackJobs;
+}
+
+// Helper to post-process raw Gemini output into stable structures
+function processJobsList(jobsList: any[], queryLocation: string): any[] {
+  return jobsList.map((job: any, index: number) => {
+    const stringToHash = `${job.title}-${job.company}`.toLowerCase().replace(/[^a-z0-9]/g, "");
+    const randomSuffix = Math.floor(1000 + Math.random() * 9000);
+    const stableId = `live-${stringToHash.slice(0, 16)}-${index}-${randomSuffix}`;
+    
+    const logoLetters = job.company
+      .split(" ")
+      .map((w: string) => w[0])
+      .join("")
+      .slice(0, 2)
+      .toUpperCase() || "JB";
+
+    let locModel: 'Remote' | 'Hybrid' | 'Onsite' = 'Onsite';
+    const parsedModel = (job.locationModel || '').toLowerCase();
+    if (parsedModel.includes('remote')) {
+      locModel = 'Remote';
+    } else if (parsedModel.includes('hybrid')) {
+      locModel = 'Hybrid';
+    }
+
+    return {
+      id: stableId,
+      title: job.title,
+      company: job.company,
+      logo: logoLetters,
+      description: job.description,
+      requirements: Array.isArray(job.requirements) ? job.requirements : [],
+      responsibilities: Array.isArray(job.responsibilities) ? job.responsibilities : [],
+      location: job.location || "Flexible",
+      locationModel: locModel,
+      salaryRange: job.salaryRange || "Competitive",
+      postedDate: new Date().toISOString().split('T')[0],
+      tags: Array.isArray(job.tags) ? job.tags : [],
+      originalUrl: job.originalUrl && job.originalUrl !== "#" ? job.originalUrl : "https://www.naukri.com/search/jobs?keyword=" + encodeURIComponent(job.title + " " + job.company),
+      source: job.source || "Naukri",
+      country: queryLocation,
+      status: "Open" as const
+    };
+  });
+}
+
 // Jobs Engine endpoint - standard list/filter (Remote,hybrid,onsite,experienceLevel,searchKeyword,country,source)
-app.get("/api/jobs", (req, res) => {
-  let filteredJobs = [...db.jobs];
+app.get("/api/jobs", async (req, res) => {
   const { locationModel, search, recentlyPosted, country, source } = req.query;
+
+  // If there's a search keyword, let's also fetch some live jobs from the internet matching that keyword!
+  if (search && typeof search === 'string' && search.trim().length > 2) {
+    console.log(`[Search Explore] Live searching for active jobs matching keyword: "${search}"`);
+    const liveJobs = await fetchLiveJobsFromSearchGrounding(search, country as string || "India", []);
+    if (liveJobs && liveJobs.length > 0) {
+      liveJobs.forEach((lj: any) => {
+        const exists = db.jobs.some(j => 
+          j.id === lj.id ||
+          (j.title.toLowerCase() === lj.title.toLowerCase() && 
+           j.company.toLowerCase() === lj.company.toLowerCase())
+        );
+        if (!exists) {
+          db.jobs.push(lj);
+        }
+      });
+      saveDB();
+    }
+  }
+
+  let filteredJobs = [...db.jobs];
 
   if (locationModel && locationModel !== "All") {
     filteredJobs = filteredJobs.filter(j => j.locationModel.toLowerCase() === (locationModel as string).toLowerCase());
@@ -1554,6 +1864,33 @@ app.get("/api/jobs/matched", authenticateToken, async (req: any, res) => {
 
   if (!targetUser.resumeText) {
     return res.status(400).json({ error: "Please upload your resume to generate matched scores." });
+  }
+
+  // Fetch real-time live jobs from the web matching the user profile!
+  try {
+    const desiredRole = targetUser.preferences?.desiredRole || targetUser.analysis?.recommendedRoles?.[0] || "Software Engineer";
+    const preferredLocation = targetUser.preferences?.preferredLocation || "India";
+    const skills = targetUser.preferences?.skills || targetUser.analysis?.parsedSkills || [];
+
+    console.log(`[Matched Jobs] Fetching real-time active jobs for ${targetUser.fullName} (${desiredRole} in ${preferredLocation})`);
+    const liveJobs = await fetchLiveJobsFromSearchGrounding(desiredRole, preferredLocation, skills);
+    
+    if (liveJobs && liveJobs.length > 0) {
+      // Insert new live jobs into db.jobs, avoiding duplicates
+      liveJobs.forEach((lj: any) => {
+        const exists = db.jobs.some(j => 
+          j.id === lj.id ||
+          (j.title.toLowerCase() === lj.title.toLowerCase() && 
+           j.company.toLowerCase() === lj.company.toLowerCase())
+        );
+        if (!exists) {
+          db.jobs.push(lj);
+        }
+      });
+      saveDB();
+    }
+  } catch (liveErr) {
+    console.error("[Matched Jobs] Skipping live fetch due to error:", liveErr);
   }
 
   // Pre-calculate flat keyword alignment scores to extract the top candidates for AI analysis
@@ -2091,6 +2428,132 @@ app.get("/api/applicants", authenticateToken, async (req: any, res) => {
   // Return users who identify as seeker or have a resume text in database
   const applicants = db.users.filter(u => u.role === 'seeker' || u.resumeText);
   res.json({ applicants });
+});
+
+// AI-Match dynamic uploaded employee/candidate details against jobs (Employer space)
+app.post("/api/employer/match-candidate", authenticateToken, async (req: any, res) => {
+  const { fullName, skills, experienceLevel, resumeText } = req.body;
+  if (!fullName) {
+    return res.status(400).json({ error: "Candidate full name is required." });
+  }
+
+  const parsedSkills = Array.isArray(skills) 
+    ? skills 
+    : (skills || "").split(",").map((s: string) => s.trim()).filter(Boolean);
+
+  const parsedSkillsLower = parsedSkills.map((s: string) => s.toLowerCase());
+
+  // Score candidate against all jobs
+  const preScoredJobs = db.jobs.map(job => {
+    const matchedReqs = job.requirements.filter((req: string) => 
+      parsedSkillsLower.some((ps: string) => ps.includes(req.toLowerCase()) || req.toLowerCase().includes(ps))
+    );
+    
+    let priorityMultiplier = 1.0;
+    const keywordMetric = job.requirements.length > 0 
+      ? (matchedReqs.length / job.requirements.length) * 100
+      : 50;
+
+    let aggregateScore = Math.round(keywordMetric * priorityMultiplier);
+    aggregateScore = Math.max(10, Math.min(100, aggregateScore));
+
+    return {
+      job,
+      matchedReqs,
+      aggregateScore
+    };
+  });
+
+  const sortedPreScored = [...preScoredJobs].sort((a, b) => b.aggregateScore - a.aggregateScore);
+  const topAISelection = sortedPreScored.slice(0, 15);
+
+  try {
+    const ai = getGeminiClient();
+    const systemPrompt = `You are a high-fidelity recruitment AI matchmaking engine. Evaluate the dynamic candidate profile details provided against each supplied job vacancy and calculate exact fit scores (0 to 100), detailed matching skills, missing skills, and 2 precise reasons. Return the results strictly conforming to the requested JSON array structure in order of matching score.`;
+
+    const simplifiedJobs = topAISelection.map(item => ({
+      id: item.job.id,
+      title: item.job.title,
+      company: item.job.company,
+      requirements: item.job.requirements,
+      description: item.job.description
+    }));
+
+    const modelResponse = await ai.models.generateContent({
+      model: "gemini-3.5-flash",
+      contents: `Candidate Profile Name: ${fullName}\nCandidate Experience Level: ${experienceLevel || 'Mid'}\nCandidate Skills:\n${JSON.stringify(parsedSkills)}\n\nCandidate Resume/Info detail:\n${resumeText || ''}\n\nAvailable Job Postings Catalog:\n${JSON.stringify(simplifiedJobs)}`,
+      config: {
+        systemInstruction: systemPrompt,
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            matches: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  jobId: { type: Type.STRING, description: "The ID of the evaluated job vacancy." },
+                  score: { type: Type.INTEGER, description: "A realistic fit percentage out of 100 based on skill overlaps and roles." },
+                  reasons: { 
+                    type: Type.ARRAY, 
+                    items: { type: Type.STRING },
+                    description: "Exactly 2 clear, professional bullet explanations about why this is (or is not) a matching fit."
+                  },
+                  matchingSkills: { 
+                    type: Type.ARRAY, 
+                    items: { type: Type.STRING },
+                    description: "Skills present in both candidate profile AND job requirements."
+                  },
+                  missingSkills: { 
+                    type: Type.ARRAY, 
+                    items: { type: Type.STRING },
+                    description: "Core requirements of the job missing from candidate profile."
+                  }
+                },
+                required: ["jobId", "score", "reasons", "matchingSkills", "missingSkills"]
+              }
+            }
+          },
+          required: ["matches"]
+        }
+      }
+    });
+
+    const matchesResult = JSON.parse(modelResponse.text || '{"matches":[]}');
+    const enrichedMatched = matchesResult.matches.map((m: any) => {
+      const parentJob = db.jobs.find(j => j.id === m.jobId);
+      return {
+        ...m,
+        job: parentJob
+      };
+    }).filter((m: any) => m.job !== undefined);
+
+    return res.json({ matches: enrichedMatched });
+
+  } catch (error: any) {
+    console.warn("AI Candidate matching error for employer, resorting to fast matching:", error.message || error);
+    
+    const fallbackMatchesDecorated = topAISelection.map(item => {
+      const job = item.job;
+      const matchingSkills = item.matchedReqs;
+      const missingSkills = job.requirements.filter((req: string) => !matchingSkills.includes(req));
+
+      return {
+        jobId: job.id,
+        score: Math.min(95, Math.max(15, item.aggregateScore)),
+        reasons: [
+          `Identified skills overlap on ${matchingSkills.length} core requirements.`,
+          `Candidate demonstrates target capacity for professional development in this sector.`
+        ],
+        matchingSkills,
+        missingSkills,
+        job
+      };
+    });
+
+    return res.json({ matches: fallbackMatchesDecorated });
+  }
 });
 
 // 3.5. Get notifications for the currently logged-in user

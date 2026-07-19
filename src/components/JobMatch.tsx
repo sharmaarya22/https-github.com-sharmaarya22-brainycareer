@@ -4,7 +4,7 @@ import {
   Sparkles, AlertCircle, Check, HelpCircle, ChevronRight, Globe, Info, 
   Search, ShieldCheck, Mail, Send, Award, Zap, TrendingUp, Cpu, 
   Layers, SlidersHorizontal, BookOpen, UserCheck, ArrowRight, CheckCircle2, RefreshCw,
-  Clock, Users
+  Clock, Users, ExternalLink
 } from 'lucide-react';
 import { User, Job, MatchResult } from '../types';
 import ResumeUploader from './ResumeUploader';
@@ -17,6 +17,7 @@ interface JobMatchProps {
   uploadingResume: boolean;
   onRefreshTelemetry: () => void;
   token: string;
+  getPortalJobUrl?: (job: Job | null) => string;
   onApplyRedirect?: (job: Job) => void;
   appliedJobs?: string[];
   currentPlan?: 'Free' | 'Pro' | 'Enterprise';
@@ -63,6 +64,7 @@ export default function JobMatch({
   uploadingResume, 
   onRefreshTelemetry,
   token,
+  getPortalJobUrl,
   onApplyRedirect,
   appliedJobs = [],
   currentPlan = 'Free',
@@ -319,14 +321,61 @@ ${user.fullName || "Aura Candidate"}`;
           </div>
         </div>
       ) : (
-        <div className="space-y-6">
-          
-          {/* DURABLE ANALYTICS METRICS WIDGET */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            
+        <div className="space-y-6 animate-fade-in">
+          {/* BENTO HEADER: COMPATIBILITY COORDINATES */}
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 pb-2">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] uppercase font-black tracking-widest text-blue-600 font-mono bg-blue-50 px-2 py-0.5 rounded border border-blue-100">
+                  AI match engine
+                </span>
+                <span className="text-[10px] text-slate-400 font-mono">Synced</span>
+              </div>
+              <h2 className="text-xl md:text-2xl font-black text-slate-900 tracking-tight font-display">
+                Top Matches for You
+              </h2>
+              <p className="text-xs text-slate-505 max-w-2xl font-semibold leading-relaxed">
+                Matched with <strong className="text-blue-600">{filteredMatchesTotal.length} jobs</strong> globally. High compatibility scores indicate superior alignment with ATS screening algorithms.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0 self-stretch md:self-auto">
+              <button
+                onClick={() => {
+                  setSearchTerm('');
+                  setLocFilter('All');
+                  setMatchTier('All');
+                  setPostedFilter('All');
+                }}
+                className="flex items-center justify-center gap-1.5 px-3.5 py-2 text-xs font-bold bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-xl cursor-pointer transition-all shadow-2xs"
+                title="Reset all filters"
+              >
+                <SlidersHorizontal className="w-3.5 h-3.5 text-slate-500" />
+                <span>Reset Filters</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  if (onRefreshTelemetry) {
+                    onRefreshTelemetry();
+                  }
+                  const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+                  if (fileInput) {
+                    fileInput.click();
+                  }
+                }}
+                className="flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-bold bg-slate-900 hover:bg-slate-850 text-white rounded-xl cursor-pointer transition-all shadow-sm"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-blue-400 animate-pulse" />
+                <span>Optimize Profile</span>
+              </button>
+            </div>
+          </div>
+
+          {/* METRICS ROW */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="bg-white border border-slate-200 p-4 rounded-2xl flex items-center justify-between relative overflow-hidden shadow-sm">
-              <span className="absolute -right-4 -bottom-4 w-12 h-12 bg-indigo-50 rounded-full blur-xl"></span>
-              <div className="space-y-1">
+              <div className="space-y-1 z-10">
                 <span className="text-[9px] uppercase font-bold tracking-wider text-slate-400 font-mono block">Evaluated Portals</span>
                 <div className="text-2xl font-black text-slate-900 tracking-tight font-mono">{jobs.length}</div>
                 <span className="text-[9px] text-emerald-600 block font-bold font-mono">100% Core Index Synced</span>
@@ -337,11 +386,10 @@ ${user.fullName || "Aura Candidate"}`;
             </div>
 
             <div className="bg-white border border-slate-200 p-4 rounded-2xl flex items-center justify-between relative overflow-hidden shadow-sm">
-              <span className="absolute -right-4 -bottom-4 w-12 h-12 bg-purple-50 rounded-full blur-xl"></span>
-              <div className="space-y-1">
+              <div className="space-y-1 z-10">
                 <span className="text-[9px] uppercase font-bold tracking-wider text-slate-400 font-mono block">Avg Compatibility Score</span>
                 <div className="text-2xl font-black text-slate-900 tracking-tight font-mono">{stats.avgScore || 78}%</div>
-                <span className="text-[9px] text-indigo-600 block font-bold font-mono">Strong global match alignment</span>
+                <span className="text-[9px] text-indigo-600 block font-bold font-mono">Strong alignment ratio</span>
               </div>
               <div className="w-9 h-9 rounded-lg bg-purple-50 flex items-center justify-center">
                 <Award className="w-4 h-4 text-purple-600" />
@@ -349,11 +397,10 @@ ${user.fullName || "Aura Candidate"}`;
             </div>
 
             <div className="bg-white border border-slate-200 p-4 rounded-2xl flex items-center justify-between relative overflow-hidden shadow-sm">
-              <span className="absolute -right-4 -bottom-4 w-12 h-12 bg-emerald-50 rounded-full blur-xl"></span>
-              <div className="space-y-1">
+              <div className="space-y-1 z-10">
                 <span className="text-[9px] uppercase font-bold tracking-wider text-slate-400 font-mono block">Super Matches (85%+)</span>
                 <div className="text-2xl font-black text-slate-900 tracking-tight font-mono">{stats.eliteCount}</div>
-                <span className="text-[9px] text-emerald-600 block font-bold font-mono">Highly optimized fit ratio</span>
+                <span className="text-[9px] text-emerald-600 block font-bold font-mono">Highly optimized match alignment</span>
               </div>
               <div className="w-9 h-9 rounded-lg bg-emerald-50 flex items-center justify-center">
                 <Zap className="w-4 h-4 text-emerald-600" />
@@ -363,8 +410,8 @@ ${user.fullName || "Aura Candidate"}`;
             <div className="bg-white border border-slate-200 p-4 rounded-2xl flex flex-col justify-center gap-1 shadow-sm">
               <span className="text-[9px] uppercase font-bold tracking-wider text-slate-400 font-mono block">Top Global Demanded Gaps</span>
               <div className="flex flex-wrap gap-1 mt-1">
-                {(stats.sortedGaps || []).map(gap => (
-                  <span key={gap.name} className="bg-amber-50 border border-amber-200 text-[9px] font-mono font-semibold text-amber-700 px-2 py-0.5 rounded leading-none">
+                {(stats.sortedGaps || []).slice(0, 3).map(gap => (
+                  <span key={gap.name} className="bg-amber-50 border border-amber-200 text-[9px] font-mono font-bold text-amber-700 px-2 py-0.5 rounded leading-none">
                     {gap.name} ({gap.count}x)
                   </span>
                 ))}
@@ -372,35 +419,35 @@ ${user.fullName || "Aura Candidate"}`;
             </div>
           </div>
 
-          {/* CRITICAL TWO-WAY CONTROL FILTER PANEL */}
-          <div className="bg-white border border-slate-200 p-4 rounded-2xl space-y-3 shadow-sm">
-            
-            <div className="flex flex-col lg:flex-row justify-between gap-4">
-              <div className="flex-1 flex flex-col sm:flex-row gap-3">
-                <div className="flex-1 flex items-center gap-2 bg-slate-50 p-2.5 px-3.5 rounded-xl border border-slate-200">
-                  <Search className="w-4 h-4 text-slate-400 shrink-0" />
+          {/* DOUBLE CONTROL FILTER ROW */}
+          <div className="bg-white border border-slate-200 p-3.5 rounded-2xl space-y-3 shadow-sm text-xs font-sans">
+            <div className="flex flex-col lg:flex-row justify-between gap-3">
+              <div className="flex-1 flex flex-col sm:flex-row gap-2.5">
+                {/* Search box */}
+                <div className="flex-1 flex items-center gap-2 bg-slate-50 p-2 px-3 rounded-xl border border-slate-200">
+                  <Search className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                   <input
                     type="text"
-                    placeholder="Identify role requirements, matching skills or gaps..."
+                    placeholder="Search roles, skills, or target keywords..."
                     value={searchTerm}
                     onChange={e => setSearchTerm(e.target.value)}
-                    className="w-full bg-transparent text-xs text-slate-800 focus:outline-none placeholder-slate-400 font-medium"
+                    className="w-full bg-transparent text-xs text-slate-800 focus:outline-none placeholder-slate-400 font-semibold"
                   />
                 </div>
 
+                {/* Location Filter Pills */}
                 <div className="flex gap-1 bg-slate-50 p-1 rounded-xl border border-slate-200">
                   {[
-                    { id: 'All', label: 'All Models' },
-                    { id: 'Remote', label: 'Remote' },
-                    { id: 'Hybrid', label: 'Hybrid' },
-                    { id: 'Onsite', label: 'Onsite' }
+                    { id: 'All', label: 'All Locations' },
+                    { id: 'Remote', label: 'Remote Only' },
+                    { id: 'Hybrid', label: 'Hybrid' }
                   ].map(item => (
                     <button
                       key={item.id}
                       onClick={() => setLocFilter(item.id as any)}
-                      className={`px-3 py-1.5 rounded-lg text-[10.5px] font-bold transition-all cursor-pointer ${
+                      className={`px-3 py-1.5 rounded-lg text-[10px] font-black transition-all cursor-pointer ${
                         locFilter === item.id 
-                          ? 'bg-indigo-600 text-white font-extrabold shadow-sm' 
+                          ? 'bg-blue-600 text-white font-extrabold shadow-sm' 
                           : 'text-slate-500 hover:text-slate-800'
                       }`}
                     >
@@ -410,20 +457,20 @@ ${user.fullName || "Aura Candidate"}`;
                 </div>
               </div>
 
+              {/* Match Tier filters */}
               <div className="flex gap-2">
-                <div className="flex gap-1 bg-slate-50 p-1 rounded-xl border border-slate-200 text-[10.5px] font-bold text-slate-500 shrink-0">
+                <div className="flex gap-1 bg-slate-50 p-1 rounded-xl border border-slate-200 text-[10px] font-black text-slate-500 shrink-0">
                   {[
                     { id: 'All', label: 'All Matches' },
                     { id: 'Elite', label: 'Elite (85%+)' },
-                    { id: 'High', label: 'High (75%+)' },
-                    { id: 'Moderate', label: 'Moderate' }
+                    { id: 'High', label: 'High (75%+)' }
                   ].map(tier => (
                     <button
                       key={tier.id}
                       onClick={() => setMatchTier(tier.id as any)}
                       className={`px-2.5 py-1.5 rounded-lg transition-all cursor-pointer ${
                         matchTier === tier.id 
-                          ? 'bg-indigo-50 text-indigo-700 font-extrabold border border-indigo-200' 
+                          ? 'bg-blue-50 text-blue-700 font-black border border-blue-250' 
                           : 'border border-transparent hover:text-slate-800'
                       }`}
                     >
@@ -431,39 +478,25 @@ ${user.fullName || "Aura Candidate"}`;
                     </button>
                   ))}
                 </div>
-
-                <button 
-                  onClick={() => {
-                    setSearchTerm('');
-                    setMatchTier('All');
-                    setLocFilter('All');
-                    setPostedFilter('All');
-                  }}
-                  className="p-2 border border-slate-250 hover:bg-slate-50 bg-white text-xs text-slate-600 font-bold rounded-xl transition-all cursor-pointer"
-                  title="Reset Filters"
-                >
-                  Clear
-                </button>
               </div>
             </div>
 
-            {/* SECOND ROW: POSTED DATE FILTER */}
-            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-3 text-[11px] font-sans">
+            {/* Time Filter Row */}
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-3 text-[10.5px]">
               <div className="flex items-center gap-2">
-                <span className="font-bold text-slate-400 uppercase tracking-wider text-[9px] font-mono">Posted:</span>
-                <div className="flex gap-1 bg-slate-50 p-1 rounded-xl border border-slate-200">
+                <span className="font-extrabold text-slate-400 uppercase tracking-wider text-[8.5px] font-mono">Posted Range:</span>
+                <div className="flex gap-1 bg-slate-50 p-0.5 rounded-lg border border-slate-200/80">
                   {[
                     { id: 'All', label: 'Anytime' },
-                    { id: '24h', label: 'Past 24 Hours' },
-                    { id: 'week', label: 'Past Week' },
-                    { id: 'month', label: 'Past Month' }
+                    { id: '24h', label: 'Past 24h' },
+                    { id: 'week', label: 'Past Week' }
                   ].map(period => (
                     <button
                       key={period.id}
                       onClick={() => setPostedFilter(period.id as any)}
-                      className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${
+                      className={`px-2.5 py-1 rounded-md text-[9.5px] font-bold transition-all cursor-pointer ${
                         postedFilter === period.id 
-                          ? 'bg-indigo-600 text-white font-extrabold shadow-sm' 
+                          ? 'bg-slate-900 text-white font-extrabold' 
                           : 'text-slate-500 hover:text-slate-850'
                       }`}
                     >
@@ -473,11 +506,10 @@ ${user.fullName || "Aura Candidate"}`;
                 </div>
               </div>
 
-              <div className="text-slate-500 text-[10.5px] font-mono font-medium">
-                Found <strong className="text-indigo-600">{filteredMatches.length} matching</strong> profiles ({currentPlan} Plan)
+              <div className="text-slate-550 font-mono text-[10px] font-bold">
+                Found <strong className="text-blue-600">{filteredMatchesTotal.length} compatible</strong> openings ({currentPlan} Plan)
               </div>
             </div>
-
           </div>
 
           {/* MASTER SPLIT LAYOUT PANEL */}
@@ -567,13 +599,16 @@ ${user.fullName || "Aura Candidate"}`;
 
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                             {/* Direct Corporate Portal Apply Button */}
-                            <button
+                            <a
+                              href={getPortalJobUrl ? getPortalJobUrl(job) : "#"}
+                              target="_blank"
+                              rel="noopener noreferrer"
                               onClick={() => {
                                 if (onApplyRedirect) {
                                   onApplyRedirect(job);
                                 }
                               }}
-                              className={`py-2 px-2 text-[10.5px] font-bold rounded-lg cursor-pointer flex items-center justify-center gap-1.5 transition-all select-none ${
+                              className={`py-2 px-2 text-[10.5px] font-bold rounded-lg cursor-pointer flex items-center justify-center gap-1.5 transition-all select-none text-center ${
                                 appliedJobs.includes(job.id)
                                   ? 'bg-emerald-100 text-emerald-800 border border-emerald-300 font-extrabold'
                                   : 'bg-indigo-600 hover:bg-indigo-700 text-white font-semibold hover:shadow-xs'
@@ -590,7 +625,7 @@ ${user.fullName || "Aura Candidate"}`;
                                   <span>Apply on Careers Portal</span>
                                 </>
                               )}
-                            </button>
+                            </a>
 
                             {/* Email Recruiter Pitch Button */}
                             <button
@@ -604,18 +639,20 @@ ${user.fullName || "Aura Candidate"}`;
 
                           <div className="flex items-center justify-between text-[9px] text-slate-500 font-mono mt-1 px-1 border-t border-slate-205 pt-2">
                             <span>Accuracyfit: {match.score}%</span>
-                            <button
-                              onClick={(e) => {
-                                e.preventDefault();
+                            <a
+                              href={getPortalJobUrl ? getPortalJobUrl(job) : "#"}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={() => {
                                 if (onApplyRedirect) {
                                   onApplyRedirect(job);
                                 }
                               }}
-                              className="text-indigo-600 font-bold hover:underline cursor-pointer flex items-center gap-0.5 inline-flex bg-transparent border-none p-0 text-[10px]"
+                              className="text-indigo-600 font-bold hover:underline cursor-pointer flex items-center gap-0.5 inline-flex text-[10px]"
                             >
                               <span>Redirect Job Portal</span>
                               <ArrowRight className="w-2.5 h-2.5" />
-                            </button>
+                            </a>
                           </div>
                         </div>
                       )}

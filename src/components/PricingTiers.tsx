@@ -1,13 +1,14 @@
 import React, { useState } from 'react';
-import { Check, Sparkles, Zap, Award, Lock, ShieldCheck, X, CheckCircle, QrCode } from 'lucide-react';
+import { Check, Sparkles, Zap, Lock, ShieldCheck, X, CheckCircle, QrCode } from 'lucide-react';
 
 interface PricingTiersProps {
   currentPlan: 'Free' | 'Pro' | 'Enterprise';
   token: string;
   onSelectPlan: (plan: 'Free' | 'Pro' | 'Enterprise') => void;
+  role?: 'seeker' | 'employer' | 'admin';
 }
 
-export default function PricingTiers({ currentPlan, token, onSelectPlan }: PricingTiersProps) {
+export default function PricingTiers({ currentPlan, token, onSelectPlan, role }: PricingTiersProps) {
   // Checkout Modal State
   const [checkoutPlan, setCheckoutPlan] = useState<'Pro' | 'Enterprise' | null>(null);
   const [upiId, setUpiId] = useState('');
@@ -21,56 +22,54 @@ export default function PricingTiers({ currentPlan, token, onSelectPlan }: Prici
   const [showSuccessScreen, setShowSuccessScreen] = useState(false);
   const [formError, setFormError] = useState('');
 
+  const isEmployer = role === 'employer';
+
   const tiers = [
     {
       id: 'Free' as const,
-      name: 'Bronze Free Plan',
+      name: 'Free Plan',
       price: '0',
-      description: 'Baseline portal exploration tools with limited matching results.',
-      features: [
-        'Up to 5 job match analysis per day',
-        'Standard search with default location filters',
-        'Lock: AI Cover Letter Studio',
-        'Lock: Interactive Interview Coach',
-        'Lock: Proximity recruiter search & profile views tracking'
+      description: isEmployer 
+        ? 'Baseline talent tools for emerging recruiters and organizations.'
+        : 'Essential job discovery and match analysis tools.',
+      features: isEmployer ? [
+        'Post up to 5 vacancies per day',
+        'Standard applicant registry access',
+        'Direct connection with potential candidates',
+        'Basic applicant overview metrics'
+      ] : [
+        'Apply to up to 5 jobs per day',
+        'Tailored custom AI cover letters for those 5 jobs',
+        'Standard matchmaking overview with default filters'
       ],
       icon: Zap,
-      accent: 'border-slate-205 text-slate-500 bg-slate-50',
-      buttonText: 'Currently Active Baseline'
+      accent: 'border-slate-200 text-slate-500 bg-slate-50',
+      buttonText: 'Currently Active Free'
     },
     {
-      id: 'Pro' as const,
-      name: 'Gold Pro Elite',
+      id: 'Pro' as const, // Maps to Pro/Premium backend integration
+      name: 'Premium Plan',
       price: '249',
-      description: 'Full automated candidate search, smart AI Cover Letter, and full match explorer.',
-      features: [
-        'Unlimited AI matching & profile overlap dials',
-        'Full Recent Posted Filters (Past 24h, Week, Month)',
-        'AI Cover Letter Studio with auto-tailoring',
-        '24/7 AI Career Coach interactive companion',
-        'Who Viewed My Profile visitor analytics views',
-        'Interactive mock interviews with customized feedback'
+      description: isEmployer
+        ? 'Complete advanced workspace to post unlimited vacancies and sort top-tier talent.'
+        : 'Complete AI-driven tools to unlock your career potential and get hired faster.',
+      features: isEmployer ? [
+        'Post unlimited vacancies per day',
+        'Advanced talent compatibility scoring & sorting matches',
+        'Priority instant candidate registry indexing',
+        'Shared talent pipeline tracking seats',
+        'Direct recruiter messaging & feedback templates'
+      ] : [
+        'Unlimited job applications & direct external apply links',
+        'Unlimited custom AI cover letter generations & templates',
+        'Unlimited resume parser updates and profile analyses',
+        '24/7 AI Career Coach interactive advisor companion',
+        'Interactive custom mock interview preparation sandbox',
+        'Profile views analytics and full matching filters'
       ],
       icon: Sparkles,
       accent: 'border-amber-200 text-amber-600 bg-amber-50 shadow-2xs',
-      buttonText: 'Upgrade to Gold Pro (INR 249)'
-    },
-    {
-      id: 'Enterprise' as const,
-      name: 'Platinum Recruiter Suite',
-      price: '399',
-      description: 'Ultimate dashboard workspace for advanced employers & recruiters.',
-      features: [
-        'Employer-verified corporate badge on postings',
-        'Unlimited vacancies posting with high seeker indexing',
-        'Advanced talent compatibility scoring and sorting matches',
-        'Unified applicant feedback templates and bulk SMS updates',
-        'Shared talent profiles pipeline tracking with team seats',
-        'Priority instant feedback loop during high volumes'
-      ],
-      icon: Award,
-      accent: 'border-violet-200 text-violet-650 bg-violet-50 shadow-2xs',
-      buttonText: 'Deploy Platinum Suite (INR 399)'
+      buttonText: isEmployer ? 'Upgrade to Premium Hiring (INR 249)' : 'Upgrade to Premium (INR 249)'
     }
   ];
 
@@ -228,10 +227,10 @@ export default function PricingTiers({ currentPlan, token, onSelectPlan }: Prici
         </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5 max-w-3xl mx-auto">
         {tiers.map((tier) => {
           const IconComponent = tier.icon;
-          const isSelected = currentPlan === tier.id;
+          const isSelected = tier.id === 'Free' ? currentPlan === 'Free' : (currentPlan === 'Pro' || currentPlan === 'Enterprise');
 
           return (
             <div
@@ -293,11 +292,7 @@ export default function PricingTiers({ currentPlan, token, onSelectPlan }: Prici
                 className={`mt-6 w-full py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                   isSelected
                     ? 'bg-slate-100 text-slate-400 cursor-default font-semibold'
-                    : tier.id === 'Pro'
-                    ? 'bg-amber-500 text-white hover:bg-amber-600 font-extrabold ring-4 ring-amber-500/10 hover:shadow-xs'
-                    : tier.id === 'Enterprise'
-                    ? 'bg-indigo-600 text-white hover:bg-indigo-700 font-extrabold ring-4 ring-indigo-500/10 hover:shadow-xs'
-                    : 'bg-slate-105 hover:bg-slate-200 text-slate-700 font-bold'
+                    : 'bg-indigo-600 text-white hover:bg-indigo-700 font-extrabold ring-4 ring-indigo-500/10 hover:shadow-xs'
                 }`}
               >
                 {isSelected ? 'Currently Active' : tier.buttonText}

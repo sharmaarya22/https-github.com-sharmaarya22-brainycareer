@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
+import { motion } from 'motion/react';
 import { 
   Briefcase, Search, MapPin, Building, Calendar, DollarSign, 
   Sparkles, AlertCircle, FileText, CheckCircle2, ChevronRight, 
   Clipboard, Check, Edit3, TrendingUp, Cpu, Info, SlidersHorizontal, Settings,
   Globe, RefreshCw, ExternalLink, Mail, X, Send, Bot, CheckSquare, Plus, Trash2, Award, Zap,
-  Users, Eye, Lock
+  Users, Eye, Lock, LayoutDashboard, Compass, HelpCircle, ShieldCheck, BookOpen
 } from 'lucide-react';
 import { User, Job, MatchResult } from '../types';
 import SkillRadarChart from './SkillRadarChart';
@@ -84,6 +85,8 @@ interface JobSeekerPortalProps {
   onShowToast?: (title: string, message: string) => void;
   currentPlan?: 'Free' | 'Pro' | 'Enterprise';
   onNavigatePricing?: () => void;
+  seekerTab?: 'jobs' | 'match' | 'resume' | 'letters' | 'interview' | 'tracker' | 'coach' | 'visitors' | 'ats' | 'career_path' | 'skills';
+  setSeekerTab?: (tab: 'jobs' | 'match' | 'resume' | 'letters' | 'interview' | 'tracker' | 'coach' | 'visitors' | 'ats' | 'career_path' | 'skills') => void;
 }
 
 export default function JobSeekerPortal({ 
@@ -103,10 +106,14 @@ export default function JobSeekerPortal({
   uploadingResume,
   onShowToast,
   currentPlan = 'Free',
-  onNavigatePricing
+  onNavigatePricing,
+  seekerTab: propsSeekerTab,
+  setSeekerTab: propsSetSeekerTab
 }: JobSeekerPortalProps) {
   
-  const [seekerTab, setSeekerTab] = useState<'jobs' | 'match' | 'resume' | 'letters' | 'interview' | 'tracker' | 'coach' | 'visitors'>('match');
+  const [localSeekerTab, setLocalSeekerTab] = useState<'jobs' | 'match' | 'resume' | 'letters' | 'interview' | 'tracker' | 'coach' | 'visitors' | 'ats' | 'career_path' | 'skills'>('match');
+  const seekerTab = propsSeekerTab || localSeekerTab;
+  const setSeekerTab = propsSetSeekerTab || setLocalSeekerTab;
   const [simulatingStep, setSimulatingStep] = useState<string | null>(null);
 
   const handleLoadDemoProfile = async (type: 'developer' | 'ba') => {
@@ -136,9 +143,11 @@ export default function JobSeekerPortal({
   };
   
   // Job Board Search/Filters
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [locModel, setLocModel] = useState<'Remote' | 'Hybrid' | 'Onsite' | 'All'>('All');
   const [postedTimeFilter, setPostedTimeFilter] = useState<'any' | '24h' | 'week' | 'month'>('any');
+  const [selectedPortal, setSelectedPortal] = useState<string>('All');
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
   
   // Resume Builder States
@@ -244,10 +253,47 @@ export default function JobSeekerPortal({
 
   const getPortalJobUrl = (job: Job | null): string => {
     if (!job) return "";
-    if (job.originalUrl && job.originalUrl !== '#') return job.originalUrl;
-    const cleanCompany = (job.company || "company").toLowerCase().replace(/[^a-z0-9]/g, '');
-    const cleanTitle = (job.title || "job").toLowerCase().replace(/[^a-z0-9]/g, '-');
-    return `https://careers.${cleanCompany}.com/jobs/${cleanTitle}-${job.id}`;
+    
+    const source = (job.source || "").toLowerCase();
+    const title = job.title || "";
+    const urlLower = (job.originalUrl || "").toLowerCase();
+    
+    // Clean up the job title: e.g. "Senior Full Stack Engineer (React/Node.js)" -> "Senior Full Stack Engineer"
+    let cleanTitle = title.replace(/\s*\([^)]*\)/g, "").trim();
+    // Remove "Lead", "Senior", etc. if we want broad matching, but clean title is already great
+    cleanTitle = cleanTitle.replace(/\s+-\s+.*$/, "").trim();
+
+    // To ensure the user gets real-world job listings on the actual platforms (since mock company names
+    // like "Vortex Tech Solutions" or "Cognitive Labs AI" do not exist on live portals and yield 0 results),
+    // we search using the Clean Job Title and key technologies (extracted from tags or requirements)
+    const skills = Array.isArray(job.tags) ? job.tags.slice(0, 2).join(" ") : "";
+    const query = `${cleanTitle} ${skills}`.trim();
+
+    if (source.includes("linkedin") || urlLower.includes("linkedin")) {
+      return `https://www.linkedin.com/jobs/search/?keywords=${encodeURIComponent(query)}`;
+    }
+    if (source.includes("naukri") || urlLower.includes("naukri")) {
+      return `https://www.naukri.com/search/jobs?keyword=${encodeURIComponent(query)}`;
+    }
+    if (source.includes("monster") || source.includes("foundit") || urlLower.includes("monster") || urlLower.includes("foundit")) {
+      return `https://www.foundit.in/srp/results?query=${encodeURIComponent(query)}`;
+    }
+    if (source.includes("hirist") || urlLower.includes("hirist")) {
+      return `https://www.hirist.tech/search.html?keyword=${encodeURIComponent(query)}`;
+    }
+    if (source.includes("indeed") || urlLower.includes("indeed")) {
+      return `https://www.indeed.com/jobs?q=${encodeURIComponent(query)}`;
+    }
+    if (source.includes("timesjobs") || urlLower.includes("timesjobs") || source.includes("times")) {
+      return `https://www.timesjobs.com/candidate/job-search.html?searchType=personalizedSearch&from=submit&txtKeywords=${encodeURIComponent(query)}`;
+    }
+    
+    // Fallback if there is a custom URL that isn't one of the known mock paths
+    if (job.originalUrl && job.originalUrl !== '#' && !job.originalUrl.includes("vortex-") && !job.originalUrl.includes("cognitive-") && !job.originalUrl.includes("scaleops-") && !job.originalUrl.includes("eleven-") && !job.originalUrl.includes("growthflow-")) {
+      return job.originalUrl;
+    }
+    
+    return `https://www.linkedin.com/jobs/search/?keywords=${encodeURIComponent(query)}`;
   };
 
   // Synchronize dynamic applications from DB to Kanban board
@@ -343,9 +389,40 @@ EDUCATION & CERTIFICATION PATHWAYS:
     }, 1500);
   };
 
+  const getTodayApplicationsCount = () => {
+    const today = new Date().toDateString();
+    return applicationsDetails.filter(app => {
+      if (!app.appliedAt) return false;
+      return new Date(app.appliedAt).toDateString() === today;
+    }).length;
+  };
+
   // Generate cover letter
   const triggerLetterGen = async () => {
     if (!selectedJobForLetter) return;
+
+    if (currentPlan === 'Free') {
+      const todayCount = getTodayApplicationsCount();
+      const todayDate = new Date().toDateString();
+      const storageKey = `cover_letters_count_${user.id}_${todayDate}`;
+      const generatedToday = parseInt(localStorage.getItem(storageKey) || '0', 10);
+
+      if (todayCount >= 5 || generatedToday >= 5) {
+        if (onShowToast) {
+          onShowToast("Daily Limit Reached", "You have reached your daily limit of 5 cover letters on the Free plan. Upgrade to Premium for unlimited cover letters!");
+        } else {
+          alert("Daily Limit Reached: You have reached your daily limit of 5 cover letters on the Free plan. Upgrade to Premium for unlimited cover letters!");
+        }
+        if (onNavigatePricing) {
+          onNavigatePricing();
+        }
+        return;
+      }
+      
+      // Increment count
+      localStorage.setItem(storageKey, (generatedToday + 1).toString());
+    }
+
     setGeneratingLetter(true);
     setCustomLetterText('');
     try {
@@ -430,16 +507,118 @@ ${user.fullName}
     }
   };
 
+  // New verification and background tracking for direct user-initiated anchor links
+  const handleVerifyAndTrackApply = (e: React.MouseEvent<HTMLAnchorElement>, job: Job) => {
+    if (currentPlan === 'Free') {
+      const todayCount = getTodayApplicationsCount();
+      if (todayCount >= 5) {
+        e.preventDefault();
+        if (onShowToast) {
+          onShowToast("Daily Limit Reached", "You have reached your daily limit of 5 applications on the Free plan. Upgrade to Premium for unlimited applications!");
+        } else {
+          alert("Daily Limit Reached: You have reached your daily limit of 5 applications on the Free plan. Upgrade to Premium for unlimited applications!");
+        }
+        if (onNavigatePricing) {
+          onNavigatePricing();
+        }
+        return;
+      }
+    }
+
+    // Inform the user we are tracking
+    setToastMessage(`🚀 Opening ${job.company} Careers Portal! Logging application tracker...`);
+    setTimeout(() => setToastMessage(null), 4500);
+
+    // Concurrently trigger background tracking (non-blocking)
+    (async () => {
+      try {
+        await fetch(`/api/jobs/${job.id}/click`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        const match = matches.find(m => m.jobId === job.id);
+        const score = match ? match.score : 85;
+        await fetch(`/api/jobs/${job.id}/apply`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            coverLetter: `Direct apply redirection tracking triggered. Candidate redirected to official careers portal with AI Fit Rating: ${score}%.`
+          })
+        });
+
+        onRefreshTelemetry();
+
+        setKanbanCards(prev => {
+          const urlToParse = (job.originalUrl || "").toLowerCase();
+          const sourceName = urlToParse.includes("linkedin") ? "LinkedIn" : 
+                             urlToParse.includes("naukri") ? "Naukri" : 
+                             urlToParse.includes("monster") || urlToParse.includes("foundit") ? "Monster" : 
+                             urlToParse.includes("hirist") ? "Hirist" : 
+                             urlToParse.includes("timesjobs") ? "TimesJobs" : "External Portal";
+          const alreadyExists = prev.some(c => c.jobId === job.id);
+          if (alreadyExists) return prev;
+          return [
+            {
+              id: `k-portal-${Date.now()}`,
+              jobId: job.id,
+              jobTitle: job.title,
+              company: job.company,
+              source: sourceName,
+              status: "Applied"
+            },
+            ...prev
+          ];
+        });
+
+        onRefreshTelemetry();
+      } catch (err) {
+        console.warn("Background tracking sync failed:", err);
+      }
+    })();
+  };
+
   // Open direct external apply and log background tracking
   const handleOpenApplySim = async (job: Job) => {
+    if (currentPlan === 'Free') {
+      const todayCount = getTodayApplicationsCount();
+      if (todayCount >= 5) {
+        if (onShowToast) {
+          onShowToast("Daily Limit Reached", "You have reached your daily limit of 5 applications on the Free plan. Upgrade to Premium for unlimited applications!");
+        } else {
+          alert("Daily Limit Reached: You have reached your daily limit of 5 applications on the Free plan. Upgrade to Premium for unlimited applications!");
+        }
+        if (onNavigatePricing) {
+          onNavigatePricing();
+        }
+        return;
+      }
+    }
+
+    const portalUrl = getPortalJobUrl(job);
+
+    // 1. Instantly open the respective external job portal in a new tab
     try {
-      // 1. Dispatch background click tracking
+      window.open(portalUrl, '_blank');
+    } catch (e) {
+      console.warn("Direct programmatic window.open blocked by sandboxed iframe. Fallback applied.", e);
+    }
+
+    // Show nice in-app toast notification confirming direct redirect tracking
+    setToastMessage(`🚀 Opening ${job.company} Careers Portal! Automatically tracking application...`);
+    setTimeout(() => setToastMessage(null), 4500);
+
+    try {
+      // 2. Dispatch background click tracking
       await fetch(`/api/jobs/${job.id}/click`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` }
       });
 
-      // 2. Dispatch background recruiter dashboard sync tracking
+      // 3. Dispatch background application tracking
       const match = matches.find(m => m.jobId === job.id);
       const score = match ? match.score : 85;
       await fetch(`/api/jobs/${job.id}/apply`, {
@@ -449,17 +628,21 @@ ${user.fullName}
           'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
-          coverLetter: `Applied via original/external platform redirection. Logged and tracked using unified system credentials with automated AI Fit rating of ${score}%.`
+          coverLetter: `Direct apply redirection tracking triggered. Candidate redirected to official careers portal with AI Fit Rating: ${score}%.`
         })
       });
 
-      // 3. Mark job as applied and refresh global telemetry state
+      // 4. Mark job as applied and refresh global telemetry state
       onRefreshTelemetry();
 
-      // 4. Append to Seeker Kanban workspace
+      // 5. Append to Seeker Kanban workspace
       setKanbanCards(prev => {
         const urlToParse = (job.originalUrl || "").toLowerCase();
-        const sourceName = urlToParse.includes("linkedin") ? "LinkedIn" : urlToParse.includes("naukri") ? "Naukri" : "External Portal";
+        const sourceName = urlToParse.includes("linkedin") ? "LinkedIn" : 
+                           urlToParse.includes("naukri") ? "Naukri" : 
+                           urlToParse.includes("monster") || urlToParse.includes("foundit") ? "Monster" : 
+                           urlToParse.includes("hirist") ? "Hirist" : 
+                           urlToParse.includes("timesjobs") ? "TimesJobs" : "External Portal";
         const alreadyExists = prev.some(c => c.jobId === job.id);
         if (alreadyExists) return prev;
         return [
@@ -475,25 +658,30 @@ ${user.fullName}
         ];
       });
 
-      // 5. Trigger notifications telemetry refresh
       onRefreshTelemetry();
-
-      // Show temporary elegant, professional non-blocking visual feedback alert
-      const portalUrl = getPortalJobUrl(job);
-      alert(`🚀 Opening Career Portal for ${job.company}!\n\nYour profile has been shared, analyzed, and synced with the employer successfully.\nRef URL: ${portalUrl}`);
-
-      // 6. Navigate directly
-      window.open(portalUrl, '_blank');
-
     } catch (err) {
-      console.error("Direct application redirection and tracking failed:", err);
-      // Fallback
-      window.open(getPortalJobUrl(job), '_blank');
+      console.error("Application tracking sync failed:", err);
     }
   };
 
   const handleTriggerApplicationSubmit = async () => {
     if (!applyModalJob) return;
+
+    if (currentPlan === 'Free') {
+      const todayCount = getTodayApplicationsCount();
+      if (todayCount >= 5) {
+        if (onShowToast) {
+          onShowToast("Daily Limit Reached", "You have reached your daily limit of 5 applications on the Free plan. Upgrade to Premium for unlimited applications!");
+        } else {
+          alert("Daily Limit Reached: You have reached your daily limit of 5 applications on the Free plan. Upgrade to Premium for unlimited applications!");
+        }
+        if (onNavigatePricing) {
+          onNavigatePricing();
+        }
+        return;
+      }
+    }
+
     setSimulatingApply(true);
     try {
       // Dispatch click event and application sync events
@@ -537,6 +725,22 @@ ${user.fullName}
 
   const handleRedirectPortalTracker = async () => {
     if (!portalSimulatorJob) return;
+
+    if (currentPlan === 'Free') {
+      const todayCount = getTodayApplicationsCount();
+      if (todayCount >= 5) {
+        if (onShowToast) {
+          onShowToast("Daily Limit Reached", "You have reached your daily limit of 5 applications on the Free plan. Upgrade to Premium for unlimited applications!");
+        } else {
+          alert("Daily Limit Reached: You have reached your daily limit of 5 applications on the Free plan. Upgrade to Premium for unlimited applications!");
+        }
+        if (onNavigatePricing) {
+          onNavigatePricing();
+        }
+        return;
+      }
+    }
+
     setSubmittingPortalMsg(true);
     try {
       // 1. Dispatch click tracking
@@ -594,6 +798,22 @@ ${user.fullName}
 
   const handlePortalSimulatorSubmit = async () => {
     if (!portalSimulatorJob) return;
+
+    if (currentPlan === 'Free') {
+      const todayCount = getTodayApplicationsCount();
+      if (todayCount >= 5) {
+        if (onShowToast) {
+          onShowToast("Daily Limit Reached", "You have reached your daily limit of 5 applications on the Free plan. Upgrade to Premium for unlimited applications!");
+        } else {
+          alert("Daily Limit Reached: You have reached your daily limit of 5 applications on the Free plan. Upgrade to Premium for unlimited applications!");
+        }
+        if (onNavigatePricing) {
+          onNavigatePricing();
+        }
+        return;
+      }
+    }
+
     const isLinkedIn = (portalSimulatorJob.originalUrl || "").toLowerCase().includes("linkedin");
     const portalName = isLinkedIn ? "LinkedIn" : (portalSimulatorJob.originalUrl || "").toLowerCase().includes("naukri") ? "Naukri" : "External Portal";
 
@@ -805,41 +1025,65 @@ ${user.fullName}
       }
     }
 
-    return matchesSearch && matchesLoc && matchesTime;
+    const jobSource = (job.source || "").toLowerCase();
+    let matchesPortal = true;
+    if (selectedPortal !== 'All') {
+      if (selectedPortal === 'LinkedIn') matchesPortal = jobSource.includes('linkedin');
+      else if (selectedPortal === 'Naukri') matchesPortal = jobSource.includes('naukri');
+      else if (selectedPortal === 'Monster') matchesPortal = jobSource.includes('monster') || jobSource.includes('foundit');
+      else if (selectedPortal === 'Hirist') matchesPortal = jobSource.includes('hirist');
+      else if (selectedPortal === 'TimesJobs') matchesPortal = jobSource.includes('timesjobs');
+    }
+
+    return matchesSearch && matchesLoc && matchesTime && matchesPortal;
   });
 
   return (
     <div id="job-seeker-view-frame" className="space-y-6 font-sans">
       
+      {/* Dynamic Non-Blocking Toast Notification */}
+      {toastMessage && (
+        <motion.div
+          initial={{ opacity: 0, y: -20, scale: 0.95 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          className="fixed top-6 left-1/2 -translate-x-1/2 z-50 bg-slate-900 border border-emerald-505/20 text-white rounded-2xl px-5 py-3 shadow-2xl flex items-center gap-3 shrink-0"
+        >
+          <div className="w-2.5 h-2.5 bg-emerald-400 rounded-full animate-ping shrink-0" />
+          <span className="text-xs font-bold font-sans tracking-wide">{toastMessage}</span>
+        </motion.div>
+      )}
+      
       {/* Sub menu tabs inside Seeker Console */}
-      <div className="flex border-b border-slate-205 pb-2 overflow-x-auto gap-4 scrollbar-none">
-        {[
-          { id: 'match', label: 'AI Matchmaking & Jobs' },
-          { id: 'resume', label: 'Resume Intelligence & Builder' },
-          { id: 'letters', label: 'AI Cover Letter Studio' },
-          { id: 'interview', label: 'Interactive Interview Coach' },
-          { id: 'tracker', label: 'Application Pipeline & Kanban' },
-          { id: 'coach', label: '24/7 AI Career Coach' },
-          { id: 'visitors', label: 'Who Viewed My Profile' }
-        ].map(tab => (
-          <button
-            key={tab.id}
-            onClick={() => setSeekerTab(tab.id as any)}
-            className={`text-sm font-bold py-2 whitespace-nowrap cursor-pointer transition-all border-b-2 inline-flex items-center gap-1.5 ${
-              seekerTab === tab.id 
-                ? 'border-indigo-600 text-indigo-700 font-extrabold' 
-                : 'border-transparent text-slate-500 hover:text-slate-800'
-            }`}
-          >
-            <span>{tab.label}</span>
-            {tab.id === 'visitors' && profileViews.length > 0 && (
-              <span className="px-1.5 py-0.5 text-[9px] font-black bg-indigo-100 text-indigo-700 rounded-full animate-pulse">
-                {profileViews.length}
-              </span>
-            )}
-          </button>
-        ))}
-      </div>
+      {!propsSeekerTab && (
+        <div className="flex border-b border-slate-205 pb-2 overflow-x-auto gap-4 scrollbar-none">
+          {[
+            { id: 'match', label: 'AI Matchmaking & Jobs' },
+            { id: 'resume', label: 'Resume Intelligence & Builder' },
+            { id: 'letters', label: 'AI Cover Letter Studio' },
+            { id: 'interview', label: 'Interactive Interview Coach' },
+            { id: 'tracker', label: 'Application Pipeline & Kanban' },
+            { id: 'coach', label: '24/7 AI Career Coach' },
+            { id: 'visitors', label: 'Who Viewed My Profile' }
+          ].map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setSeekerTab(tab.id as any)}
+              className={`text-sm font-bold py-2 whitespace-nowrap cursor-pointer transition-all border-b-2 inline-flex items-center gap-1.5 ${
+                seekerTab === tab.id 
+                  ? 'border-indigo-600 text-indigo-700 font-extrabold' 
+                  : 'border-transparent text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              <span>{tab.label}</span>
+              {tab.id === 'visitors' && profileViews.length > 0 && (
+                <span className="px-1.5 py-0.5 text-[9px] font-black bg-indigo-100 text-indigo-700 rounded-full animate-pulse">
+                  {profileViews.length}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
 
       {seekerTab === 'jobs' && (
         <div className="space-y-6">
@@ -1107,12 +1351,15 @@ ${user.fullName}
                                 View Alignment Analysis
                               </button>
                               
-                              <button 
-                                onClick={() => handleOpenApplySim(job)}
-                                className="px-3 py-1 bg-cyan-400 text-slate-950 text-[10px] font-black rounded-lg hover:bg-cyan-300 transition-all cursor-pointer inline-flex items-center gap-0.5 shadow-md shadow-cyan-400/15"
+                              <a 
+                                href={getPortalJobUrl(job)}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={(e) => handleVerifyAndTrackApply(e, job)}
+                                className="px-3 py-1 bg-cyan-400 text-slate-950 text-[10px] font-black rounded-lg hover:bg-cyan-300 transition-all cursor-pointer inline-flex items-center gap-0.5 shadow-md shadow-cyan-400/15 text-center uppercase tracking-wider text-center"
                               >
                                 <span>Fast Apply</span>
-                              </button>
+                              </a>
                             </div>
                           </div>
                         );
@@ -1183,6 +1430,24 @@ ${user.fullName}
                     <option value="24h">✨ Past 24h (Gold Pro)</option>
                     <option value="week">📅 Past Week (Gold Pro)</option>
                     <option value="month">📊 Past Month (Gold Pro)</option>
+                  </select>
+                </div>
+
+                <div className="h-4 w-px bg-slate-200 hidden xl:block"></div>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="text-[10px] uppercase font-bold text-slate-400 font-mono tracking-wider">Job Portal:</span>
+                  <select
+                    value={selectedPortal}
+                    onChange={(e) => setSelectedPortal(e.target.value)}
+                    className="bg-slate-50 border border-slate-200 text-xs font-bold rounded-xl px-3 py-2 text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+                  >
+                    <option value="All">🌐 All Portals</option>
+                    <option value="LinkedIn">💼 LinkedIn</option>
+                    <option value="Naukri">🇮🇳 Naukri</option>
+                    <option value="Monster">👹 Monster / Foundit</option>
+                    <option value="Hirist">⚡ Hirist</option>
+                    <option value="TimesJobs">📰 TimesJobs</option>
                   </select>
                 </div>
               </div>
@@ -1394,28 +1659,27 @@ ${user.fullName}
                               Applications Deadline: 2026-06-30
                             </span>
 
-                            <div className="flex gap-3">
-                              <button
-                                onClick={() => {
-                                  setPortalSimulatorJob(job);
-                                  setExternalFlowMode('choice');
-                                  setPortalFullName(user.fullName || '');
-                                  setPortalEmail(user.email || '');
-                                  setPortalSuccess(false);
-                                  setPortalCoverLetterText(`Dear Hiring Team,\n\nI am extremely excited to apply for the ${job.title} position at ${job.company}. Based on my background in professional engineering projects and related certifications, I believe i am a wonderful fit for this vacancy.\n\nBest regards,\n${user.fullName || 'Applicant'}`);
-                                }}
-                                className="px-4.5 py-2.5 border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-bold flex items-center gap-2 cursor-pointer transition-all shadow-sm"
+                            <div className="flex gap-3 font-sans">
+                              <a
+                                href={getPortalJobUrl(job)}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={(e) => handleVerifyAndTrackApply(e, job)}
+                                className="px-4.5 py-2.5 border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-bold flex items-center justify-center text-center gap-2 cursor-pointer transition-all shadow-sm"
                               >
                                 <ExternalLink className="w-4 h-4 text-indigo-600" />
                                 Original Corporate Post
-                              </button>
+                              </a>
                               
-                              <button
-                                onClick={() => handleOpenApplySim(job)}
-                                className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white transition-all text-xs font-bold rounded-xl cursor-pointer shadow-sm shadow-indigo-600/10"
+                              <a
+                                href={getPortalJobUrl(job)}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={(e) => handleVerifyAndTrackApply(e, job)}
+                                className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white transition-all text-xs font-bold rounded-xl cursor-pointer shadow-sm shadow-indigo-600/10 flex items-center justify-center text-center font-sans uppercase tracking-wider text-center"
                               >
                                 Smart AI Instant Apply
-                              </button>
+                              </a>
                             </div>
                           </div>
 
@@ -1447,6 +1711,7 @@ ${user.fullName}
           uploadingResume={uploadingResume}
           onRefreshTelemetry={onRefreshTelemetry}
           token={token}
+          getPortalJobUrl={getPortalJobUrl}
           onApplyRedirect={(job) => {
             handleOpenApplySim(job);
           }}
@@ -2124,6 +2389,341 @@ ${user.fullName}
         </div>
       )}
 
+      {seekerTab === 'ats' && (
+        <div className="space-y-6">
+          {/* Bento hub from analyzed credentials */}
+          {user.resumeText ? (
+            <div className="space-y-6">
+              <div className="bg-white border border-slate-205 p-6 md:p-8 rounded-3xl space-y-5 font-sans shadow-sm">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <div className="flex items-center gap-1.5">
+                      <SlidersHorizontal className="w-5 h-5 text-indigo-600" />
+                      <span className="text-xs uppercase tracking-widest font-black text-indigo-600 font-mono">ATS OPTIMIZATION PLATFORM</span>
+                    </div>
+                    <h3 className="text-base md:text-lg font-bold text-slate-900 mt-1">Applicant Tracking System (ATS) Diagnostic & Scorecard</h3>
+                  </div>
+                  <button 
+                    onClick={() => onUploadResume({ text: "" }, "")}
+                    className="text-xs text-rose-600 font-bold hover:text-rose-800 transition-all underline cursor-pointer"
+                  >
+                    Reset & Re-upload Resume
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 text-sm">
+                  {/* Score & Suitability */}
+                  <div className="p-5 bg-slate-50 border border-slate-200 rounded-2xl space-y-4">
+                    <span className="text-xs font-mono uppercase font-black text-slate-500 tracking-wider block">Candidate Match Compatibility Index</span>
+                    <div className="flex items-center gap-3">
+                      <div className="text-4xl font-extrabold text-indigo-700 font-mono tracking-tight">{user.analysis?.score || 85}%</div>
+                      <div className="bg-indigo-100 border border-indigo-200 rounded-lg p-1.5 px-2.5 text-xs text-indigo-805 font-bold font-mono">
+                        {(user.analysis?.score || 85) >= 90 ? 'A+ ELITE COMPLIANT' : 'B+ HIGH FIT'}
+                      </div>
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <span className="text-xs text-slate-550 block uppercase font-mono font-bold">Primary Target Roles suitability:</span>
+                      <div className="flex flex-wrap gap-1.5 mt-0.5">
+                        {(user.analysis?.recommendedRoles || ["Fullstack Engineer", "Frontend Architect"]).map((role) => (
+                          <span key={role} className="bg-white text-slate-700 p-1 px-2.5 rounded-lg text-xs font-bold border border-slate-200">
+                            {role}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                    <p className="text-xs text-slate-600 leading-relaxed font-sans italic mt-2 bg-white p-3 rounded-xl border border-slate-200">
+                      &ldquo;{user.analysis?.executiveSummary || 'Profile successfully parsed for target global corporate channels.'}&rdquo;
+                    </p>
+                  </div>
+
+                  {/* Recommendations */}
+                  <div className="p-5 bg-slate-50 border border-slate-200 rounded-2xl space-y-4 flex flex-col justify-between">
+                    <div className="space-y-3">
+                      <span className="text-xs font-mono uppercase font-black text-slate-550 tracking-wider block">Suggested CV Optimization Checklist</span>
+                      <div className="space-y-2.5 font-sans">
+                        {(user.analysis?.suggestedImprovements || ["Quantifying microfrontend metrics", "Detailing docker cluster deployments"]).map((improvement, index) => (
+                          <div key={index} className="flex items-start gap-2 text-xs text-slate-750 font-semibold leading-relaxed">
+                            <span className="text-indigo-600 font-bold select-none shrink-0">•</span>
+                            <span>{improvement}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="pt-4 border-t border-slate-200/60 mt-2 text-[10px] text-slate-500 font-mono flex items-center gap-1.5">
+                      <Bot className="w-4 h-4 text-indigo-500 animate-pulse" />
+                      <span>Optimized keywords increases screening callbacks by 2.4x.</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-indigo-50 border border-indigo-150 p-4.5 rounded-2xl text-xs text-indigo-900 flex items-center gap-2.5 font-semibold">
+                  <Sparkles className="w-5 h-5 text-indigo-600 shrink-0 animate-pulse" />
+                  <div className="leading-relaxed">
+                    <strong>Resume Upload Status:</strong> Analysing file <code className="bg-indigo-100 px-1 py-0.5 rounded font-mono font-bold">{user.resumeFileName || "alex_mercer_cv.pdf"}</code>. Your credentials have been indexed in Cloud.
+                  </div>
+                </div>
+              </div>
+
+              {/* Preset selectors to try another CV format */}
+              <div className="bg-white border border-slate-205 p-6 rounded-3xl space-y-3 shadow-sm">
+                <span className="text-xs uppercase font-bold text-slate-500 block mb-1 tracking-wider font-mono">Test ATS Parser with another Candidate Profile Preset:</span>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 font-sans">
+                  <button
+                    onClick={() => handleLoadDemoProfile('developer')}
+                    disabled={uploadingResume}
+                    className="p-4 text-left bg-indigo-50/50 hover:bg-indigo-50 border border-indigo-100 rounded-2xl transition-all font-sans cursor-pointer group shadow-sm flex justify-between items-center"
+                  >
+                    <div>
+                      <span className="text-sm font-bold text-indigo-900 block group-hover:text-indigo-75">Alex Mercer Preset</span>
+                      <span className="text-xs text-indigo-650 block mt-1 font-mono">Software Lead (React, Node, Cloud, TS)</span>
+                    </div>
+                    <ChevronRight className="w-5 h-5 text-indigo-500 group-hover:text-indigo-700" />
+                  </button>
+
+                  <button
+                    onClick={() => handleLoadDemoProfile('ba')}
+                    disabled={uploadingResume}
+                    className="p-4 text-left bg-emerald-50/30 hover:bg-emerald-50 border border-emerald-100 rounded-2xl transition-all font-sans cursor-pointer group shadow-sm flex justify-between items-center"
+                  >
+                    <div>
+                      <span className="text-sm font-bold text-emerald-950 block group-hover:text-emerald-75">Sarah Jenkins Preset</span>
+                      <span className="text-xs text-emerald-650 block mt-1 font-mono">Business Analyst (SQL, BA, Scrum)</span>
+                    </div>
+                    <ChevronRight className="w-5 h-5 text-emerald-500 group-hover:text-emerald-700" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="bg-white border border-slate-200 p-8 rounded-3xl space-y-6 font-sans shadow-sm">
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <SlidersHorizontal className="w-5 h-5 text-indigo-600 animate-pulse" />
+                  <span className="text-xs uppercase font-extrabold tracking-wider text-indigo-600 font-mono">ATS Diagnostics Engine</span>
+                </div>
+                <h3 className="text-xl font-bold text-slate-900">Upload Your Credentials to Activate ATS Analysis</h3>
+                <p className="text-sm text-slate-650 leading-relaxed font-semibold">
+                  To analyze your resume compliance rate, parse your core competencies, and identify critical technological gaps, upload your CV or select a preset to begin.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <button
+                  onClick={() => handleLoadDemoProfile('developer')}
+                  disabled={uploadingResume}
+                  className="p-4 text-left bg-indigo-50/50 hover:bg-indigo-50 border border-indigo-100 rounded-2xl transition-all font-sans cursor-pointer group shadow-sm flex justify-between items-center"
+                >
+                  <div>
+                    <span className="text-sm font-bold text-indigo-900 block">Alex Mercer Preset</span>
+                    <span className="text-xs text-indigo-650 block mt-1 font-mono">Software Lead (React, Node, Cloud, TS)</span>
+                  </div>
+                  <ChevronRight className="w-5 h-5 text-indigo-500" />
+                </button>
+
+                <button
+                  onClick={() => handleLoadDemoProfile('ba')}
+                  disabled={uploadingResume}
+                  className="p-4 text-left bg-emerald-50/30 hover:bg-emerald-50 border border-emerald-100 rounded-2xl transition-all font-sans cursor-pointer group shadow-sm flex justify-between items-center"
+                >
+                  <div>
+                    <span className="text-sm font-bold text-emerald-950 block">Sarah Jenkins Preset</span>
+                    <span className="text-xs text-emerald-650 block mt-1 font-mono">Business Analyst (SQL, BA, Scrum)</span>
+                  </div>
+                  <ChevronRight className="w-5 h-5 text-emerald-500" />
+                </button>
+              </div>
+
+              <div className="border-t border-slate-100 pt-6">
+                <span className="text-xs uppercase font-bold text-slate-500 block mb-3 tracking-wider font-mono">Upload Your CV File:</span>
+                <div className="p-5 bg-slate-50 rounded-2xl border border-slate-200">
+                  <ResumeUploader onUploadSuccess={onUploadResume} isLoading={uploadingResume} currentFileName={user.resumeFileName} />
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {seekerTab === 'career_path' && (
+        <div className="space-y-6">
+          <div className="bg-white border border-slate-205 p-6 md:p-8 rounded-3xl space-y-6 font-sans shadow-sm">
+            <div>
+              <div className="flex items-center gap-1.5">
+                <TrendingUp className="w-5 h-5 text-indigo-600" />
+                <span className="text-xs uppercase tracking-widest font-black text-indigo-600 font-mono">3-YEAR STRATEGIC PLAN</span>
+              </div>
+              <h3 className="text-base md:text-lg font-bold text-slate-900 mt-1">Autonomous 3-Year Career Progression & Skill Roadmap</h3>
+              <p className="text-xs text-slate-500 mt-0.5 font-medium">AI-backed professional advancement milestones for matching global standards.</p>
+            </div>
+
+            {user.resumeText ? (
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Left Card: Diagnostics */}
+                <div className="lg:col-span-1 p-5 bg-slate-50 border border-slate-205 rounded-2xl space-y-4">
+                  <span className="text-xs font-mono uppercase font-black text-slate-550 block tracking-wider">Current Diagnostic Stage</span>
+                  <div className="bg-white p-4 rounded-xl border border-slate-200 text-xs font-semibold space-y-3.5">
+                    <div>
+                      <span className="text-[10px] font-mono text-slate-400 block uppercase font-bold">Identified Base Stage:</span>
+                      <p className="font-extrabold text-slate-850 text-sm mt-0.5">{user.analysis?.careerPath?.currentState || 'Software Engineer (L2/L3 Intermediate)'}</p>
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-mono text-slate-400 block uppercase font-bold">Target Transition Roles:</span>
+                      <div className="flex flex-wrap gap-1 mt-1 font-sans font-bold">
+                        {(user.analysis?.careerPath?.transitionRoles || ["Lead Engineer", "Solutions Architect"]).map(role => (
+                          <span key={role} className="bg-indigo-50 border border-indigo-100 text-indigo-700 text-[10px] py-0.5 px-2 rounded-md">
+                            {role}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-indigo-50 border border-indigo-150 p-4 rounded-xl text-xs text-indigo-905 leading-relaxed font-sans font-semibold">
+                    💡 <strong>Aura Growth Recommendation:</strong> Focus heavily on missing system architecture concepts & certification targets to shave 1.5 years off this transition timeline.
+                  </div>
+                </div>
+
+                {/* Right Area: Timelines */}
+                <div className="lg:col-span-2 space-y-4">
+                  <span className="text-xs font-mono uppercase font-black text-slate-550 block tracking-wider px-1">Progression Milestones Timeline</span>
+                  
+                  <div className="relative border-l-2 border-indigo-200 ml-4.5 pl-6.5 space-y-6.5 py-2 font-sans">
+                    {(user.analysis?.careerPath?.strategicPlan || [
+                      "Master Backend Architecture (Node/Express clustering) & Cloud Deployment Fundamentals",
+                      "Acquire Docker and Kubernetes container orchestration credentials & lead small cross-functional feature pods",
+                      "Gain AWS Solutions Architect Certificate, spearhead enterprise-scale microservice migration, and step into Tech Lead role"
+                    ]).map((plan, pIdx) => {
+                      const icons = [Compass, Award, Briefcase];
+                      const IconComp = icons[pIdx] || Compass;
+                      const colors = [
+                        'border-indigo-600 text-indigo-600 bg-white',
+                        'border-cyan-500 text-cyan-600 bg-white',
+                        'border-emerald-500 text-emerald-600 bg-white'
+                      ];
+                      
+                      return (
+                        <div key={pIdx} className="relative group">
+                          {/* Circle dot left position */}
+                          <div className={`absolute -left-[38px] top-1.5 w-7 h-7 rounded-full border-2 ${colors[pIdx] || 'border-slate-305 text-slate-500'} flex items-center justify-center font-bold text-xs shadow-sm group-hover:scale-105 transition-all`}>
+                            {pIdx + 1}
+                          </div>
+                          <div className="p-4 bg-slate-50 hover:bg-slate-50/80 border border-slate-205 rounded-2xl transition-all shadow-3xs">
+                            <div className="flex items-center gap-2 mb-1">
+                              <IconComp className="w-4 h-4 text-slate-500 shrink-0" />
+                              <span className="font-extrabold text-slate-900 text-xs uppercase font-mono tracking-wider">Phase {pIdx + 1}: Year {pIdx + 1} Targets</span>
+                            </div>
+                            <p className="text-xs text-slate-700 leading-relaxed font-sans font-semibold">{plan}</p>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-12 text-slate-405 text-xs font-semibold">
+                Please upload your resume in the ATS portal to compute your 3-year strategic growth timeline.
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {seekerTab === 'skills' && (
+        <div className="space-y-6">
+          <div className="bg-white border border-slate-205 p-6 md:p-8 rounded-3xl space-y-6 font-sans shadow-sm">
+            <div>
+              <div className="flex items-center gap-1.5">
+                <Award className="w-5 h-5 text-indigo-600" />
+                <span className="text-xs uppercase tracking-widest font-black text-indigo-600 font-mono">COMPETENCY INVENTORY</span>
+              </div>
+              <h3 className="text-base md:text-lg font-bold text-slate-900 mt-1">Skills Compatibility Matrix & Gap Radar</h3>
+              <p className="text-xs text-slate-500 mt-0.5">A comprehensive view of your active professional credentials plotted against standard market expectations.</p>
+            </div>
+
+            {user.resumeText ? (
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                {/* Radar Chart section */}
+                <div className="lg:col-span-5 flex flex-col items-center">
+                  <span className="text-xs font-mono uppercase font-black text-slate-550 tracking-wider mb-3 block self-start">Visual Compatibility Coverage</span>
+                  <SkillRadarChart 
+                    requirements={[...(user.analysis?.keyStrengths || []), ...(user.analysis?.skillGaps || [])].slice(0, 6)}
+                    matchingSkills={user.analysis?.keyStrengths || []}
+                    missingSkills={user.analysis?.skillGaps || []}
+                    jobTitle={user.analysis?.recommendedRoles?.[0] || "Target Profile"}
+                  />
+                  <div className="mt-3.5 flex items-center gap-4 text-[10.5px] font-semibold font-sans text-slate-500">
+                    <span className="flex items-center gap-1">
+                      <span className="w-3 h-3 bg-indigo-600/90 border border-indigo-700 rounded"></span>
+                      <span>Verified Strengths (95)</span>
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <span className="w-3 h-3 bg-red-400/20 border border-red-400/50 rounded"></span>
+                      <span>Skill Deficiencies (25)</span>
+                    </span>
+                  </div>
+                </div>
+
+                {/* Breakdown details */}
+                <div className="lg:col-span-7 space-y-4">
+                  <span className="text-xs font-mono uppercase font-black text-slate-550 block tracking-wider">Granular Competency Breakdown</span>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Strengths card */}
+                    <div className="bg-emerald-50/10 border border-emerald-250 p-4.5 rounded-xl space-y-3">
+                      <span className="text-[10px] font-mono uppercase font-extrabold text-emerald-800 tracking-wider block">
+                        ✅ Your Strongest Assets ({user.analysis?.keyStrengths?.length || 0})
+                      </span>
+                      <div className="flex flex-wrap gap-1.5 font-sans">
+                        {(user.analysis?.keyStrengths || ["React", "TypeScript", "Tailwind"]).map(skill => (
+                          <span key={skill} className="bg-emerald-50 border border-emerald-200 text-emerald-800 text-[10.5px] font-bold p-1 px-2 rounded-lg inline-flex items-center gap-1">
+                            <Check className="w-3 h-3 text-emerald-600 font-bold" />
+                            {skill}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Deficiencies card */}
+                    <div className="bg-amber-50/10 border border-amber-200 p-4.5 rounded-xl space-y-3">
+                      <span className="text-[10px] font-mono uppercase font-extrabold text-amber-800 tracking-wider block">
+                        ⚠️ High-Impact Gaps to Fill ({user.analysis?.skillGaps?.length || 0})
+                      </span>
+                      <div className="flex flex-wrap gap-1.5 font-sans">
+                        {(user.analysis?.skillGaps || ["AWS", "Docker", "Kubernetes"]).map(skill => (
+                          <span key={skill} className="bg-amber-50 border border-amber-200 text-amber-850 text-[10.5px] font-bold p-1 px-2 rounded-lg inline-flex items-center gap-1">
+                            <AlertCircle className="w-3 h-3 text-amber-600" />
+                            {skill}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Recommendations panel */}
+                  <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-2.5 font-sans text-xs">
+                    <div className="flex items-center gap-1 text-indigo-75">
+                      <Bot className="w-4 h-4 text-indigo-600" />
+                      <span className="font-extrabold uppercase font-mono text-[10px] text-slate-500 tracking-wider">Aura Core Gap-Mitigation Strategy:</span>
+                    </div>
+                    <ul className="space-y-1.5 text-slate-650 pl-1 font-semibold list-disc list-inside">
+                      <li>Acquire the <strong>AWS Certified Cloud Practitioner</strong> standard to prove microservice deployment capability.</li>
+                      <li>Incorporate <strong>Docker containerization</strong> files directly in your next GitHub showcase repository.</li>
+                      <li>Quantify your performance improvements in key summaries (e.g. &quot;increased delivery velocity by 18%&quot;).</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-12 text-slate-405 text-xs font-semibold">
+                Please upload your resume in the ATS portal to view your comprehensive skills radar compatibility analysis.
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* DISCOVER HR CONTACT Automated Email dialog modal */}
       {emailModalJob && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex justify-center items-center z-50 p-4">
@@ -2758,15 +3358,16 @@ ${user.fullName}
                           >
                             Back
                           </button>
-                          <button
-                            type="button"
+                          <a
+                            href={getPortalJobUrl(portalSimulatorJob)}
+                            target="_blank"
+                            rel="noopener noreferrer"
                             onClick={handleRedirectPortalTracker}
-                            disabled={submittingPortalMsg}
-                            className={`px-6 py-2.5 rounded-xl text-xs font-black flex items-center gap-2 transition-all cursor-pointer shadow-lg hover:-translate-y-0.5 ${brand.accentClass}`}
+                            className={`px-6 py-2.5 rounded-xl text-xs font-black flex items-center gap-2 transition-all cursor-pointer hover:-translate-y-0.5 text-center ${brand.accentClass}`}
                           >
                             <ExternalLink className="w-4 h-4" />
                             {submittingPortalMsg ? 'Syncing...' : 'Launch Portal & Initiate Auto-Tracker'}
-                          </button>
+                          </a>
                         </div>
                       </div>
                     )}

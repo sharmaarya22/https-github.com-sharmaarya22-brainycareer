@@ -13,6 +13,8 @@ interface EmployerPortalProps {
   onRefreshJobs: () => Promise<void>;
   registeredUsers: User[];
   currentPlan: 'Free' | 'Pro' | 'Enterprise';
+  onShowToast?: (title: string, message: string) => void;
+  onNavigatePricing?: () => void;
 }
 
 export default function EmployerPortal({ 
@@ -22,7 +24,9 @@ export default function EmployerPortal({
   onAddJob, 
   onRefreshJobs, 
   registeredUsers = [], 
-  currentPlan 
+  currentPlan,
+  onShowToast,
+  onNavigatePricing
 }: EmployerPortalProps) {
   const [activeTab, setActiveTab] = useState<'applicants' | 'listings' | 'interview_assistant'>('applicants');
   const [companyProfile, setCompanyProfile] = useState({
@@ -45,6 +49,15 @@ export default function EmployerPortal({
   const [newDesc, setNewDesc] = useState('');
   const [newReqs, setNewReqs] = useState('');
   const [newTags, setNewTags] = useState('');
+
+  // Dynamic custom candidate/employee matching state variables
+  const [candName, setCandName] = useState('');
+  const [candSkills, setCandSkills] = useState('');
+  const [candExp, setCandExp] = useState<'Entry' | 'Mid' | 'Senior'>('Mid');
+  const [candResumeText, setCandResumeText] = useState('');
+  const [candMatches, setCandMatches] = useState<any[]>([]);
+  const [isMatchingCandidate, setIsMatchingCandidate] = useState(false);
+  const [matchError, setMatchError] = useState<string | null>(null);
 
   // Local applicants list (with initial fallback/mock seekers, strictly excluding Gaurav!)
   const [applicants, setApplicants] = useState<any[]>([
@@ -273,6 +286,25 @@ export default function EmployerPortal({
       return;
     }
 
+    // Enforce Free plan job listing limit
+    if (currentPlan === 'Free' && !editingJobId) {
+      const companyJobsCount = jobs.filter(jb => {
+        const companyName = companyProfile.name.toLowerCase();
+        return jb.company && jb.company.toLowerCase() === companyName;
+      }).length;
+      if (companyJobsCount >= 5) {
+        if (onShowToast) {
+          onShowToast("Upgrade Required", "You have reached your limit of 5 job listings on the Free plan. Upgrade to Premium for unlimited job postings!");
+        } else {
+          alert("Upgrade Required: You have reached your limit of 5 job listings on the Free plan. Upgrade to Premium for unlimited job postings!");
+        }
+        if (onNavigatePricing) {
+          onNavigatePricing();
+        }
+        return;
+      }
+    }
+
     const payload = {
       title: newTitle,
       company: newCompany || companyProfile.name,
@@ -478,6 +510,50 @@ export default function EmployerPortal({
     ]);
   };
 
+  const handleMatchCandidateWithAI = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!candName.trim()) {
+      alert("Candidate/Employee name is required.");
+      return;
+    }
+
+    setIsMatchingCandidate(true);
+    setMatchError(null);
+    setCandMatches([]);
+
+    try {
+      const response = await fetch('/api/employer/match-candidate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          fullName: candName.trim(),
+          skills: candSkills,
+          experienceLevel: candExp,
+          resumeText: candResumeText.trim()
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to generate match ratings.");
+      }
+
+      const matchData = await response.json();
+      setCandMatches(matchData.matches || []);
+      if (onShowToast) {
+        onShowToast("Match Completed", `Successfully calculated matching scores for candidate ${candName}!`);
+      }
+    } catch (err: any) {
+      console.error(err);
+      setMatchError(err.message || "An unexpected error occurred during AI matchmaking.");
+    } finally {
+      setIsMatchingCandidate(false);
+    }
+  };
+
   // Filter messages for current selected seeker thread
   const filteredChats = selectedApplicant ? messages.filter(
     (m: any) => (m.senderId === user.id && m.receiverId === selectedApplicant.id) || 
@@ -541,6 +617,17 @@ export default function EmployerPortal({
             }`}
           >
             Interview Question Assistant
+          </button>
+
+          <button 
+            onClick={() => setActiveTab('dynamic_matcher')}
+            className={`px-4.5 py-2 rounded-xl transition-all cursor-pointer ${
+              activeTab === 'dynamic_matcher' 
+                ? 'bg-white text-indigo-600 shadow-sm font-extrabold' 
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            Direct Employee Matcher
           </button>
         </div>
       </div>
@@ -1085,6 +1172,211 @@ export default function EmployerPortal({
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* 4. DIRECT EMPLOYEE/CANDIDATE MATCHER TAB */}
+      {activeTab === 'dynamic_matcher' && (
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-8 items-start">
+          
+          {/* Left panel: Candidate/Employee upload & detail form */}
+          <div className="lg:col-span-2 border border-slate-200 bg-white p-6 rounded-3xl space-y-6 shadow-sm">
+            <div>
+              <h3 className="text-base font-bold text-slate-950 uppercase tracking-wider flex items-center gap-1.5">
+                <Users className="w-5 h-5 text-indigo-600" />
+                Upload Employee / Candidate details
+              </h3>
+              <p className="text-xs text-slate-500 mt-1">Enter candidate background, experiences, and core skills to evaluate alignment with your open job listings instantly.</p>
+            </div>
+
+            <form onSubmit={handleMatchCandidateWithAI} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-600 mb-1.5">Candidate Full Name</label>
+                <input
+                  type="text"
+                  required
+                  value={candName}
+                  onChange={(e) => setCandName(e.target.value)}
+                  placeholder="e.g., Jane Miller"
+                  className="w-full bg-slate-50 border border-slate-200 px-3.5 py-2.5 rounded-xl text-sm focus:ring-2 focus:ring-indigo-600 outline-none text-slate-900 font-semibold"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 mb-1.5">Experience Seniority Tier</label>
+                  <select
+                    value={candExp}
+                    onChange={(e: any) => setCandExp(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 px-3 py-2.5 rounded-xl text-sm focus:ring-2 focus:ring-indigo-600 outline-none text-slate-900 font-bold cursor-pointer"
+                  >
+                    <option value="Entry">Entry (0-2 years)</option>
+                    <option value="Mid">Mid Level (2-5 years)</option>
+                    <option value="Senior">Senior Elite (5+ years)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-600 mb-1.5">Key Core Skills (comma-separated)</label>
+                <input
+                  type="text"
+                  required
+                  value={candSkills}
+                  onChange={(e) => setCandSkills(e.target.value)}
+                  placeholder="e.g., React, Node.js, Express, PostgreSQL"
+                  className="w-full bg-slate-50 border border-slate-200 px-3.5 py-2.5 rounded-xl text-sm focus:ring-2 focus:ring-indigo-600 outline-none text-slate-900 font-semibold"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-600 mb-1.5">Paste Resume Text or Professional Profile Details</label>
+                <textarea
+                  rows={6}
+                  value={candResumeText}
+                  onChange={(e) => setCandResumeText(e.target.value)}
+                  placeholder="Paste work experience, past roles, or complete resume details here to power deep semantic AI matching..."
+                  className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl text-sm focus:ring-2 focus:ring-indigo-600 outline-none text-slate-900 font-medium resize-none shadow-inner"
+                />
+              </div>
+
+              <button
+                id="evaluate-candidate-ai-btn"
+                type="submit"
+                disabled={isMatchingCandidate}
+                className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-sm transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 shadow-md shadow-indigo-100"
+              >
+                <Sparkles className="w-4 h-4" />
+                <span>{isMatchingCandidate ? "AI Matchmaker running..." : "Evaluate & List Best Matches"}</span>
+              </button>
+            </form>
+          </div>
+
+          {/* Right panel: Live Matchmaking ratings */}
+          <div className="lg:col-span-3 border border-slate-200 bg-white p-6 rounded-3xl space-y-6 shadow-sm min-h-[500px]">
+            <div>
+              <h3 className="text-base font-bold text-slate-950 uppercase tracking-wider flex items-center gap-1">
+                <Briefcase className="w-5 h-5 text-indigo-600" />
+                AI Job Matchmaker Report Card
+              </h3>
+              <p className="text-xs text-slate-500 mt-1 leading-relaxed">Dynamic semantic AI evaluation. Your posted jobs are automatically indexed and compared against candidate qualifications.</p>
+            </div>
+
+            {isMatchingCandidate ? (
+              <div className="flex flex-col items-center justify-center py-20 space-y-4">
+                <div className="relative w-12 h-12">
+                  <div className="absolute inset-0 rounded-full border-4 border-indigo-100 animate-pulse"></div>
+                  <div className="absolute inset-0 rounded-full border-4 border-indigo-600 border-t-transparent animate-spin"></div>
+                </div>
+                <div className="text-center">
+                  <p className="text-sm font-extrabold text-slate-800 animate-pulse">Running AI Career Matchmaking Algorithm...</p>
+                  <p className="text-xs text-slate-500 mt-1">Analyzing candidate resume details against active vacancy specifications</p>
+                </div>
+              </div>
+            ) : matchError ? (
+              <div className="p-4 bg-red-50 border border-red-100 rounded-2xl flex items-start gap-3 text-red-700 text-xs font-semibold">
+                <AlertCircle className="w-5 h-5 text-red-500 shrink-0" />
+                <div>
+                  <span className="font-extrabold block">Matchmaker Error</span>
+                  <p className="mt-0.5">{matchError}</p>
+                </div>
+              </div>
+            ) : candMatches.length > 0 ? (
+              <div className="space-y-4 max-h-[600px] overflow-y-auto pr-1">
+                {candMatches.map((matchItem: any, index: number) => {
+                  const job = matchItem.job;
+                  const score = matchItem.score;
+                  return (
+                    <div key={job.id} className="p-5 bg-slate-50 border border-slate-200 rounded-2xl space-y-4 hover:border-indigo-200 hover:bg-slate-50/50 transition-all shadow-2xs">
+                      
+                      {/* Top Job/Score bar */}
+                      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pb-3 border-b border-slate-150">
+                        <div>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-[10px] font-mono font-black text-indigo-700 bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded uppercase">Rank #{index + 1}</span>
+                            <h4 className="text-sm font-black text-slate-900 leading-tight">{job.title}</h4>
+                          </div>
+                          <p className="text-xs text-slate-500 font-semibold mt-1">{job.company} • <span className="font-mono text-[11px]">{job.location} ({job.locationModel})</span></p>
+                        </div>
+                        
+                        <div className="text-right shrink-0">
+                          <span className={`text-lg font-black tracking-tight ${score >= 80 ? 'text-emerald-600' : score >= 50 ? 'text-indigo-600' : 'text-slate-500'}`}>
+                            {score}% Match
+                          </span>
+                          <div className="w-24 bg-slate-200 h-1.5 rounded-full overflow-hidden mt-1">
+                            <div 
+                              className={`h-full rounded-full transition-all duration-500 ${score >= 80 ? 'bg-emerald-500' : score >= 50 ? 'bg-indigo-500' : 'bg-slate-400'}`}
+                              style={{ width: `${score}%` }}
+                            ></div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Matching / Missing Skill Tags */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs font-semibold">
+                        <div className="space-y-1">
+                          <span className="text-[10px] text-emerald-800 uppercase font-mono tracking-wider flex items-center gap-1 font-black">
+                            <Check className="w-3.5 h-3.5 text-emerald-600" />
+                            Matching Core Skills ({matchItem.matchingSkills?.length || 0})
+                          </span>
+                          <div className="flex flex-wrap gap-1 pt-1">
+                            {matchItem.matchingSkills && matchItem.matchingSkills.length > 0 ? (
+                              matchItem.matchingSkills.map((sk: string, i: number) => (
+                                <span key={i} className="bg-emerald-55 bg-opacity-20 text-emerald-700 text-[10px] px-2 py-0.5 rounded font-bold uppercase">
+                                  {sk}
+                                </span>
+                              ))
+                            ) : (
+                              <span className="text-[11px] text-slate-400 font-medium italic">No precise skill overlaps detected</span>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="space-y-1">
+                          <span className="text-[10px] text-amber-800 uppercase font-mono tracking-wider flex items-center gap-1 font-black">
+                            <AlertCircle className="w-3 h-3 text-amber-500" />
+                            Missing Core Skills ({matchItem.missingSkills?.length || 0})
+                          </span>
+                          <div className="flex flex-wrap gap-1 pt-1">
+                            {matchItem.missingSkills && matchItem.missingSkills.length > 0 ? (
+                              matchItem.missingSkills.map((sk: string, i: number) => (
+                                <span key={i} className="bg-amber-55 bg-opacity-20 text-amber-700 text-[10px] px-2 py-0.5 rounded font-bold uppercase">
+                                  {sk}
+                                </span>
+                              ))
+                            ) : (
+                              <span className="text-[11px] text-slate-400 font-medium italic">None missing</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* AI Reasons Bullet Explanations */}
+                      <div className="space-y-1.5 pt-1.5 border-t border-slate-150">
+                        <span className="text-[9.5px] uppercase font-mono tracking-widest text-slate-400 block font-black">AI RECRUITER ASSESSMENT</span>
+                        <ul className="space-y-1 text-xs text-slate-700 font-medium">
+                          {matchItem.reasons && matchItem.reasons.map((re: string, i: number) => (
+                            <li key={i} className="flex items-start gap-2">
+                              <span className="text-indigo-500 select-none mt-0.5">•</span>
+                              <span className="leading-relaxed">{re}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="h-96 border border-slate-200 border-dashed rounded-3xl flex flex-col items-center justify-center text-slate-400 text-sm font-medium p-6 text-center">
+                <Sparkles className="w-8 h-8 text-indigo-400 animate-pulse mb-3" />
+                <p>No matchmaking report generated yet.</p>
+                <p className="text-xs text-slate-400 max-w-xs mt-1.5">Enter candidate details on the left, then click "Evaluate & List Best Matches" to analyze job suitability instantly.</p>
+              </div>
+            )}
+          </div>
+
         </div>
       )}
 
