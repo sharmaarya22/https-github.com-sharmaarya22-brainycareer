@@ -83,8 +83,8 @@ export default function AuthInterface({ onAuthSuccess }: AuthInterfaceProps) {
   const fillCredentials = (type: 'admin' | 'seeker' | 'employer') => {
     setIsLogin(true);
     if (type === 'admin') {
-      setEmail('gaurav');
-      setPassword('123456');
+      setEmail('admin');
+      setPassword('admin');
     } else if (type === 'seeker') {
       setEmail('upretigaurav@gmail.com');
       setPassword('123456');
@@ -718,6 +718,38 @@ export default function AuthInterface({ onAuthSuccess }: AuthInterfaceProps) {
                   />
                 </div>
               </div>
+
+              {/* Quick Demo Autofills */}
+              {isLogin && (
+                <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200 space-y-2">
+                  <span className="text-[9px] font-black text-slate-500 block uppercase tracking-wider text-center">
+                    ⚡ Quick Demo Portal Switchers
+                  </span>
+                  <div className="grid grid-cols-3 gap-1.5 font-sans">
+                    <button
+                      type="button"
+                      onClick={() => fillCredentials('admin')}
+                      className="py-1.5 bg-white hover:bg-indigo-50 hover:border-indigo-200 border border-slate-200 rounded-lg text-[9.5px] font-extrabold text-slate-700 hover:text-indigo-900 cursor-pointer text-center transition-all shadow-2xs"
+                    >
+                      Demo Admin
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => fillCredentials('seeker')}
+                      className="py-1.5 bg-white hover:bg-indigo-50 hover:border-indigo-200 border border-slate-200 rounded-lg text-[9.5px] font-extrabold text-slate-700 hover:text-indigo-900 cursor-pointer text-center transition-all shadow-2xs"
+                    >
+                      Demo Seeker
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => fillCredentials('employer')}
+                      className="py-1.5 bg-white hover:bg-indigo-50 hover:border-indigo-200 border border-slate-200 rounded-lg text-[9.5px] font-extrabold text-slate-700 hover:text-indigo-900 cursor-pointer text-center transition-all shadow-2xs"
+                    >
+                      Demo Employer
+                    </button>
+                  </div>
+                </div>
+              )}
 
               <div className="flex justify-between items-center text-[10px] pt-1">
                 <span className="text-slate-450 font-semibold">

@@ -6,6 +6,7 @@ import { GoogleGenAI, Type } from "@google/genai";
 import dotenv from "dotenv";
 import { createRequire } from "module";
 import { createClient } from "@supabase/supabase-js";
+import nodemailer from "nodemailer";
 
 // Load environment variables
 dotenv.config();
@@ -90,6 +91,409 @@ function getGeminiClient(): GoogleGenAI {
     });
   }
   return aiClient;
+}
+
+// SMTP Transporter configuration
+const smtpHost = process.env.SMTP_HOST || "";
+const smtpPort = parseInt(process.env.SMTP_PORT || "2525", 10);
+const smtpUser = process.env.SMTP_USER || "";
+const smtpPass = process.env.SMTP_PASS || "";
+const smtpFrom = process.env.SMTP_FROM || "Brainy Career Ecosystem <support@brainycareer.com>";
+
+let mailTransporter: any = null;
+if (smtpHost && smtpUser && smtpPass) {
+  try {
+    mailTransporter = nodemailer.createTransport({
+      host: smtpHost,
+      port: smtpPort,
+      auth: {
+        user: smtpUser,
+        pass: smtpPass
+      }
+    });
+    console.log(`Nodemailer SMTP Transporter initialized successfully at ${smtpHost}:${smtpPort}`);
+  } catch (err: any) {
+    console.error("Nodemailer transporter initialization error:", err?.message || err);
+  }
+} else {
+  console.log("No SMTP credentials detected in environment variables. Email notifications will run in developer fallback mock mode.");
+}
+
+function generateEmailHTMLTemplate(title: string, bodyHtml: string) {
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${title}</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: #F8FAFC;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      color: #0F172A;
+    }
+    table {
+      border-collapse: collapse;
+    }
+    .wrapper {
+      width: 100%;
+      table-layout: fixed;
+      background-color: #F8FAFC;
+      padding: 40px 0;
+    }
+    .container {
+      max-width: 600px;
+      margin: 0 auto;
+      background-color: #FFFFFF;
+      border: 1px solid #E2E8F0;
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.02);
+    }
+    .header {
+      background: linear-gradient(135deg, #0F172A 0%, #1E293B 100%);
+      padding: 32px;
+      text-align: center;
+      border-bottom: 3px solid #4F46E5;
+    }
+    .logo-badge {
+      display: inline-block;
+      background-color: #4F46E5;
+      color: #FFFFFF;
+      font-weight: 900;
+      font-size: 20px;
+      letter-spacing: -1px;
+      padding: 8px 16px;
+      border-radius: 8px;
+      margin-bottom: 8px;
+      font-family: 'Courier New', Courier, monospace;
+    }
+    .header-title {
+      color: #FFFFFF;
+      font-size: 22px;
+      font-weight: 800;
+      margin: 8px 0 0 0;
+      letter-spacing: -0.5px;
+    }
+    .header-subtitle {
+      color: #94A3B8;
+      font-size: 12px;
+      margin: 4px 0 0 0;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+    .content {
+      padding: 36px 32px;
+      line-height: 1.6;
+      font-size: 15px;
+    }
+    .hero-greeting {
+      font-size: 18px;
+      font-weight: 700;
+      color: #0F172A;
+      margin-top: 0;
+      margin-bottom: 16px;
+    }
+    .bullet-list {
+      background-color: #F1F5F9;
+      border-radius: 12px;
+      padding: 16px;
+      margin: 20px 0;
+      list-style-type: none;
+    }
+    .bullet-list li {
+      margin-bottom: 12px;
+      padding-left: 24px;
+      position: relative;
+    }
+    .bullet-list li::before {
+      content: "✦";
+      color: #4F46E5;
+      position: absolute;
+      left: 0;
+      font-weight: bold;
+    }
+    .bullet-list li:last-child {
+      margin-bottom: 0;
+    }
+    .btn-cta {
+      display: inline-block;
+      background-color: #4F46E5;
+      color: #FFFFFF !important;
+      text-decoration: none;
+      font-weight: 700;
+      font-size: 14px;
+      padding: 12px 24px;
+      border-radius: 8px;
+      margin: 24px 0;
+      text-align: center;
+      box-shadow: 0 4px 6px -1px rgba(79, 70, 229, 0.2);
+    }
+    .footer {
+      background-color: #1E293B;
+      padding: 24px;
+      text-align: center;
+      font-size: 11px;
+      color: #94A3B8;
+      border-top: 1px solid #334155;
+    }
+    .footer a {
+      color: #38BDF8;
+      text-decoration: none;
+    }
+    .divider {
+      border: 0;
+      border-top: 1px solid #E2E8F0;
+      margin: 24px 0;
+    }
+    .highlight-card {
+      border-left: 4px solid #10B981;
+      background-color: #F0FDF4;
+      padding: 16px;
+      border-radius: 0 12px 12px 0;
+      margin: 20px 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrapper">
+    <div class="container">
+      <div class="header">
+        <div class="logo-badge">BC</div>
+        <h1 class="header-title">Brainy Career</h1>
+        <p class="header-subtitle">AI-Powered Talent Matching Ecosystem</p>
+      </div>
+      <div class="content">
+        ${bodyHtml}
+      </div>
+      <div class="footer">
+        <p>© 2026 Brainy Career Inc. All rights reserved.</p>
+        <p>You received this transactional system notification because of your active portal account.</p>
+        <p>
+          <a href="mailto:support@brainycareer.com">Contact Support</a> • 
+          <a href="#">Privacy Policy</a> • 
+          <a href="#">Dashboard Panel</a>
+        </p>
+      </div>
+    </div>
+  </div>
+</body>
+</html>`;
+}
+
+function getRegistrationEmailContent(fullName: string, email: string, role: string) {
+  const roleName = role === "seeker" ? "Job Seeker" : "Employer / Recruiter";
+  
+  const bodyHtml = `
+    <h2 class="hero-greeting">Welcome to the Future of Talent Acquisition, ${fullName}!</h2>
+    <p>We are absolutely thrilled to welcome you to <strong>Brainy Career</strong>. Your account has been successfully created and secured on our unified matching portal.</p>
+    
+    <div class="highlight-card">
+      <strong style="color: #065F46; font-size: 14px;">✓ Account Registration Verified</strong>
+      <p style="margin: 4px 0 0 0; font-size: 13px; color: #047857;">Email Address: <strong>${email}</strong><br>Selected Portal Profile: <strong>${roleName}</strong></p>
+    </div>
+
+    <p>Here is what you can accomplish on your dashboard right now:</p>
+    <ul class="bullet-list">
+      <li><strong>AI Resume & Profile Analyzer:</strong> Submit your career background or job description text to parse core competencies automatically.</li>
+      <li><strong>Semantic Profile Matcher:</strong> Instantly map your qualifications against open vacancies in our high-density database with precise match percentage scores.</li>
+      <li><strong>Real-Time Team Messaging:</strong> Chat directly with potential talent or hiring managers with zero intermediate agency delay.</li>
+    </ul>
+
+    <div style="text-align: center;">
+      <a href="https://brainycareer.com/dashboard" class="btn-cta">Access Your Portal Workspace</a>
+    </div>
+
+    <p>If you have any questions or need onboarding guidance, our 24/7 success managers are always available to help.</p>
+    
+    <hr class="divider">
+    <p style="font-size: 12px; color: #64748B;">If you did not register for this account, please ignore this email or contact support to report unauthorized actions.</p>
+  `;
+
+  const plainText = `Hi ${fullName},
+
+Welcome to Brainy Career!
+
+Your account has been successfully verified. 
+Email Address: ${email}
+Profile Role: ${roleName}
+
+Get started today:
+1. Parse your resume text with our AI Career Analyzer.
+2. View high-score job matches mapped directly to your skills.
+3. Chat with recruiters or employers in real-time.
+
+Access your workspace now at: https://brainycareer.com/dashboard
+
+Warm regards,
+The Brainy Career Team`;
+
+  return {
+    subject: `[Brainy Career] Welcome to your new AI Talent Workspace!`,
+    html: generateEmailHTMLTemplate("Welcome to Brainy Career", bodyHtml),
+    text: plainText
+  };
+}
+
+function getPremiumUpgradeEmailContent(fullName: string, email: string, planType: string, amount: string, orderId: string, payeeUpi: string) {
+  const isRecruiter = planType.toLowerCase().includes("recruiter") || planType === "Enterprise";
+  const planName = planType === "Pro" ? "Gold Pro Elite" : "Platinum Recruiter Suite";
+  
+  const bodyHtml = `
+    <h2 class="hero-greeting" style="color: #4F46E5;">Congratulations, Your Workspace is Now Elite!</h2>
+    <p>Hi ${fullName},</p>
+    <p>We are delighted to confirm that your payment has successfully cleared. Your Brainy Career account has been instantly upgraded to the <strong>${planName}</strong> membership tier.</p>
+    
+    <div class="highlight-card" style="border-left-color: #10B981; background-color: #F0FDF4;">
+      <strong style="color: #065F46; font-size: 14px;">⚡ SUBSCRIPTION ACTIVE - ALL PREMIUM TOOLS UNLOCKED</strong>
+      <p style="margin: 4px 0 0 0; font-size: 13px; color: #047857;">Enjoy unlimited AI matching scans, full recruiter outreach pipelines, and advanced ATS optimization checkers.</p>
+    </div>
+
+    <h3 style="font-size: 14px; margin-top: 24px; margin-bottom: 8px; font-weight: 800; text-transform: uppercase; color: #475569; letter-spacing: 0.5px;">Transaction Receipt Details</h3>
+    <table style="width: 100%; font-size: 13px; border-top: 1px solid #E2E8F0; margin-bottom: 24px;">
+      <tr>
+        <td style="padding: 10px 0; color: #64748B;">Invoice Ref / Order ID:</td>
+        <td style="padding: 10px 0; text-align: right; font-weight: bold; font-family: monospace;">${orderId}</td>
+      </tr>
+      <tr>
+        <td style="padding: 10px 0; color: #64748B;">Upgraded Tier:</td>
+        <td style="padding: 10px 0; text-align: right; font-weight: bold; color: #4F46E5;">${planName}</td>
+      </tr>
+      <tr>
+        <td style="padding: 10px 0; color: #64748B;">Settlement Amount:</td>
+        <td style="padding: 10px 0; text-align: right; font-weight: bold; font-size: 15px; color: #0F172A;">₹${amount}.00</td>
+      </tr>
+      <tr>
+        <td style="padding: 10px 0; color: #64748B;">Gateway Status:</td>
+        <td style="padding: 10px 0; text-align: right; font-weight: bold; color: #059669;">SUCCESSFUL / SETTLED</td>
+      </tr>
+      <tr>
+        <td style="padding: 10px 0; color: #64748B;">Payer UPI handle:</td>
+        <td style="padding: 10px 0; text-align: right; font-weight: bold; font-family: monospace;">${payeeUpi}</td>
+      </tr>
+    </table>
+
+    <p>Your upgraded plan unlocks these exclusive elite features:</p>
+    <ul class="bullet-list">
+      ${isRecruiter ? `
+        <li><strong>AI Deep Candidate Sourcing:</strong> Upload any raw Job Specification document and fetch pre-screened seeker matches instantly.</li>
+        <li><strong>Direct Talent Outreach:</strong> Reach out directly to match-list seekers via integrated messaging and customized invitation logs.</li>
+        <li><strong>Unlimited Vacancy Visibility:</strong> Host premium job listings with priority algorithmic placement on applicant feeds.</li>
+      ` : `
+        <li><strong>Deep Resume Coach:</strong> Leverage AI feedback to optimize your credentials against competitive market standards.</li>
+        <li><strong>Advanced ATS Cover Letter Maker:</strong> Build highly tailored, employer-ready cover letters in seconds.</li>
+        <li><strong>Direct Employer Messaging:</strong> Contact hiring teams and receive responses directly inside your dedicated dashboard inbox.</li>
+      `}
+    </ul>
+
+    <div style="text-align: center;">
+      <a href="https://brainycareer.com/dashboard" class="btn-cta">Explore Elite Superpowers</a>
+    </div>
+
+    <p>Thank you for partnering with Brainy Career to accelerate your professional roadmap.</p>
+    
+    <hr class="divider">
+    <p style="font-size: 11px; color: #94A3B8; text-align: center;">For billing inquiries or enterprise customized invoices, contact our ledger operations team at <a href="mailto:accounts@brainycareer.com" style="color: #4F46E5; text-decoration: underline;">accounts@brainycareer.com</a>.</p>
+  `;
+
+  const plainText = `Hi ${fullName},
+
+Congratulations! Your account has been upgraded to Brainy Career ${planName} Elite.
+
+Payment Receipt details:
+--------------------------------------------
+Order ID: ${orderId}
+Upgrade Tier: ${planName}
+Amount Paid: ₹${amount}.00 (UPI Settled)
+Payer VPA: ${payeeUpi}
+Payment Status: SUCCESSFUL
+
+Your advanced features are now instantly active. Thank you for your support!
+
+Warm regards,
+Brainy Career Billing Desk
+accounts@brainycareer.com`;
+
+  return {
+    subject: `[CONFIRMED] ₹${amount} Payment Receipt - Brainy Career ${planType} Elite Subscription`,
+    html: generateEmailHTMLTemplate("Payment Confirmation - Brainy Career Elite", bodyHtml),
+    text: plainText
+  };
+}
+
+function getOtpEmailContent(email: string, code: string) {
+  const bodyHtml = `
+    <h2 class="hero-greeting">Verify Your Account Identity</h2>
+    <p>Hi there,</p>
+    <p>We received a request to verify your email address on <strong>Brainy Career</strong>. Please use the secure, one-time passcode (OTP) below to authenticate your action:</p>
+    
+    <div style="text-align: center; margin: 30px 0;">
+      <div style="display: inline-block; background-color: #F1F5F9; border: 2px dashed #4F46E5; border-radius: 12px; padding: 16px 36px;">
+        <span style="font-family: 'Courier New', Courier, monospace; font-size: 32px; font-weight: 900; color: #4F46E5; letter-spacing: 6px;">${code}</span>
+      </div>
+    </div>
+
+    <div class="highlight-card" style="border-left-color: #3B82F6; background-color: #EFF6FF;">
+      <strong style="color: #1E3A8A; font-size: 13px;">🔒 Security Advisory</strong>
+      <p style="margin: 4px 0 0 0; font-size: 12px; color: #1D4ED8;">This code is valid for exactly <strong>10 minutes</strong> and can only be used once. Never share this passcode with anyone, including Brainy Career system administrators.</p>
+    </div>
+
+    <p>If you did not initiate this identity check, please disregard this email or update your password if you suspect unauthorized activity.</p>
+  `;
+
+  const plainText = `Hi there,
+
+We received an identity verification request for your Brainy Career account.
+
+Your One-Time Passcode (OTP) is: ${code}
+
+This code is valid for 10 minutes. Please do not share it with anyone.
+
+If you didn't request this, please ignore this message safely.
+
+Best regards,
+The Brainy Career Team`;
+
+  return {
+    subject: `[Brainy Career] ${code} is your secure identity verification code`,
+    html: generateEmailHTMLTemplate("Verify Identity - Brainy Career", bodyHtml),
+    text: plainText
+  };
+}
+
+async function sendSaaSEmail(to: string, subject: string, htmlContent: string, plainText: string) {
+  console.log(`\n=============================================================`);
+  console.log(`📧  DISPATCHING BRANDED SYSTEM EMAIL Notification`);
+  console.log(`=============================================================`);
+  console.log(`Recipient:   ${to}`);
+  console.log(`Subject:     ${subject}`);
+  console.log(`Timestamp:   ${new Date().toISOString()}`);
+  console.log(`-------------------------------------------------------------`);
+  console.log(`PLAINTEXT PREVIEW:\n${plainText.substring(0, 300)}...`);
+  console.log(`=============================================================\n`);
+
+  if (mailTransporter) {
+    try {
+      const info = await mailTransporter.sendMail({
+        from: smtpFrom,
+        to,
+        subject,
+        text: plainText,
+        html: htmlContent
+      });
+      console.log(`✅ Email delivered successfully! Message ID: ${info.messageId}`);
+      return { success: true, messageId: info.messageId, mode: "smtp" };
+    } catch (err: any) {
+      console.error(`❌ SMTP Delivery failed: ${err?.message || err}`);
+      return { success: false, error: err?.message || err, mode: "failed" };
+    }
+  } else {
+    console.log(`⚠️  Operating in mock dev mode (no SMTP variables). Email simulated successfully.`);
+    return { success: true, mode: "mock" };
+  }
 }
 
 // Local Database File Setup for Persistence
@@ -378,6 +782,28 @@ function initDB() {
     adminUser.role = "admin";
   }
 
+  // Pre-seed default admin user with username 'admin' and password 'admin'
+  let defaultAdminUser = data.users.find((u: any) => u.email.toLowerCase() === "admin" || u.id === "system-admin-usr-id");
+  if (!defaultAdminUser) {
+    defaultAdminUser = {
+      id: "system-admin-usr-id",
+      fullName: "System Admin",
+      email: "admin",
+      role: "admin",
+      password: "admin",
+      profileCompleted: true,
+      appliedJobs: [],
+      clickedJobs: [],
+      sentEmails: [],
+      applications: []
+    };
+    data.users.push(defaultAdminUser);
+  } else {
+    defaultAdminUser.email = "admin";
+    defaultAdminUser.password = "admin";
+    defaultAdminUser.role = "admin";
+  }
+
   // Pre-seed default seeker user if missing
   let seekerUser = data.users.find((u: any) => u.email.toLowerCase() === "upretigaurav@gmail.com" || u.id === "user-1781431402208");
   if (!seekerUser) {
@@ -525,16 +951,8 @@ app.post("/api/auth/register", async (req, res) => {
     return res.status(400).json({ error: "Administrator registration is restricted. Please login using your assigned admin credentials." });
   }
 
-  // Reject registering emails or usernames matching and reserving Gaurav identifier
   const cleanEmail = email.trim().toLowerCase();
-  if (cleanEmail === "gaurav" || cleanEmail.includes("gaurav")) {
-    return res.status(400).json({ error: "Registration for system administrator identifiers is restricted." });
-  }
-
   const cleanName = fullName.trim();
-  if (cleanName.toLowerCase() === "gaurav") {
-    return res.status(400).json({ error: "The name 'Gaurav' is reserved for system administrators." });
-  }
 
   if (cleanName.length < 3) {
     return res.status(400).json({ error: "Please enter your full professional name (minimum 3 characters)." });
@@ -574,6 +992,26 @@ app.post("/api/auth/register", async (req, res) => {
 
   db.users.push(newUser);
   saveDB();
+
+  // Generate welcome email content and register inside user's local sentEmails telemetry log
+  const welcomeContent = getRegistrationEmailContent(newUser.fullName, newUser.email, newUser.role);
+  const systemEmailRecord = {
+    id: "welcome-" + Date.now(),
+    jobId: "system-welcome",
+    jobTitle: "System Onboarding Welcome",
+    company: "Brainy Career Team",
+    hrEmail: "support@brainycareer.com",
+    subject: welcomeContent.subject,
+    body: welcomeContent.text,
+    sentAt: new Date().toISOString()
+  };
+  newUser.sentEmails.push(systemEmailRecord);
+  saveDB();
+
+  // Send the email in a non-blocking asynchronous manner
+  sendSaaSEmail(newUser.email, welcomeContent.subject, welcomeContent.html, welcomeContent.text).catch(e => {
+    console.warn("Non-blocking registration welcome email delivery failed:", e?.message || e);
+  });
 
   // Transmit to real Supabase Cloud if available
   if (supabase) {
@@ -700,6 +1138,13 @@ app.post("/api/auth/send-otp", async (req: any, res: any) => {
     otpsMemory.set(cleanEmail, code);
 
     console.log(`Generated identity verification OTP for ${cleanEmail}: ${code}`);
+
+    // Dispatch branded HTML OTP Email
+    const otpContent = getOtpEmailContent(cleanEmail, code);
+    await sendSaaSEmail(cleanEmail, otpContent.subject, otpContent.html, otpContent.text).catch(e => {
+      console.warn("Non-blocking OTP email failure:", e?.message || e);
+    });
+
     return res.json({
       success: true,
       message: "Identity verification code generated successfully.",
@@ -1100,6 +1545,61 @@ app.get("/api/user/activities", authenticateToken, async (req: any, res) => {
     clicked,
     emails,
     appliedDetails
+  });
+});
+
+// Super-Admin dashboard telemetry aggregate feed
+app.get("/api/admin/dashboard", authenticateToken, async (req: any, res: any) => {
+  if (req.user.role !== "admin") {
+    return res.status(403).json({ error: "Access denied. Administrator privileges required." });
+  }
+
+  // Collated sent emails
+  const allSentEmails: any[] = [];
+  db.users.forEach(u => {
+    if (u.sentEmails && Array.isArray(u.sentEmails)) {
+      u.sentEmails.forEach((email: any) => {
+        allSentEmails.push({
+          ...email,
+          recipientName: u.fullName,
+          recipientEmail: u.email,
+          userId: u.id
+        });
+      });
+    }
+  });
+
+  // Sort collated emails by timestamp desc
+  allSentEmails.sort((a, b) => new Date(b.sentAt || 0).getTime() - new Date(a.sentAt || 0).getTime());
+
+  // Collated users
+  const usersList = db.users.map(u => ({
+    id: u.id,
+    fullName: u.fullName,
+    email: u.email,
+    role: u.role,
+    plan: u.plan || "Free",
+    profileCompleted: !!u.profileCompleted,
+    status: u.status || "Active"
+  }));
+
+  // Aggregate stats
+  const totalSeekers = db.users.filter(u => u.role === "seeker").length;
+  const totalEmployers = db.users.filter(u => u.role === "employer").length;
+  const totalPro = db.users.filter(u => u.plan === "Pro").length;
+  const totalEnterprise = db.users.filter(u => u.plan === "Enterprise").length;
+  const estimatedMRR = (totalPro * 1499) + (totalEnterprise * 4999);
+
+  res.json({
+    users: usersList,
+    sentEmails: allSentEmails,
+    stats: {
+      totalSeekers,
+      totalEmployers,
+      totalPro,
+      totalEnterprise,
+      estimatedMRR
+    }
   });
 });
 
@@ -3138,20 +3638,34 @@ app.post("/api/payments/webhook", async (req: any, res) => {
 
     // 3. Generate and register professional TRANSACTION CONFIRMATION EMAIL inside sentEmails
     const emailRefId = "email-" + Date.now();
+    const premiumUpgradeContent = getPremiumUpgradeEmailContent(
+      targetUser.fullName || payeeName || "Candidate",
+      targetUser.email,
+      planType,
+      String(amountValue),
+      orderId,
+      payeeUpi
+    );
+
     const confirmedEmail = {
       id: emailRefId,
       jobId: "billing-invoice",
       jobTitle: "Premium Upgrade Invoice",
       company: "Brainy Career Payments",
       hrEmail: "accounts@brainycareer.com",
-      subject: `[CONFIRMED] ₹${amountValue} Payment Receipt - Brainy Career ${planType} Elite`,
-      body: `Hi ${targetUser.fullName || payeeName || "Candidate"},\n\nWe are pleased to confirm that your instant UPI payment has cleared. Details of your premium subscription are attached below:\n\n--------------------------------------------\nINVOICE REFERENCE AND SERVICES CLEARANCE\n--------------------------------------------\nOrder ID: ${orderId}\nSubscription Tier: ${planType === 'Pro' ? 'Gold Pro Elite' : 'Platinum Recruiter Suite'}\nSettlement Fee: ₹${amountValue}.00 (Zero Fee Processing)\nSelected Gateway: UPI Network / Razorpay Server\nCustomer VPA Handle: ${payeeUpi}\nClearing Status: SUCCESSFUL / SETTLED\nApproved On: 2026-06-14\n\nYour advanced features (ATS Match Overflow, cover letter templates, career coach, recruiter profiles tracker) are now instantly unlocked on your current workspace dashboard.\n\nThank you for choosing Brainy Career.\n\nWarm regards,\nBrainy Career Billing Desk\naccounts@brainycareer.com`,
+      subject: premiumUpgradeContent.subject,
+      body: premiumUpgradeContent.text,
       sentAt: new Date().toISOString()
     };
 
     if (!targetUser.sentEmails) targetUser.sentEmails = [];
     targetUser.sentEmails.push(confirmedEmail);
     saveDB();
+
+    // Send the email in a non-blocking asynchronous manner
+    sendSaaSEmail(targetUser.email, premiumUpgradeContent.subject, premiumUpgradeContent.html, premiumUpgradeContent.text).catch(e => {
+      console.warn("Non-blocking payment receipt email delivery failed:", e?.message || e);
+    });
 
     // Update cloud model if active
     if (supabase) {
