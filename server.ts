@@ -2556,6 +2556,195 @@ app.post("/api/employer/match-candidate", authenticateToken, async (req: any, re
   }
 });
 
+// AI-Match posted/uploaded job details and skills against job seekers (Employer space)
+app.post("/api/employer/match-seekers", authenticateToken, async (req: any, res) => {
+  const { jobTitle, skills, jobDescription } = req.body;
+  if (!jobTitle) {
+    return res.status(400).json({ error: "Job title is required." });
+  }
+
+  // Parse target job skills
+  const targetSkills = Array.isArray(skills)
+    ? skills
+    : (skills || "").split(",").map((s: string) => s.trim()).filter(Boolean);
+
+  const targetSkillsLower = targetSkills.map((s: string) => s.toLowerCase());
+
+  // Find all candidate seekers
+  const seekers = db.users.filter((u: any) => u.role === 'seeker' || u.resumeText);
+
+  // Fallback mock seekers for testing & initial empty database populations
+  const mockSeekers = [
+    {
+      id: "seeker-mock-1",
+      fullName: "Alex Rivera",
+      role: "seeker",
+      email: "alex.rivera@email.com",
+      resumeText: "Senior Full Stack Engineer. 6 years experience. Expert in React, Redux, Node.js, and TypeScript. Optimized microservices with Docker.",
+      analysis: {
+        parsedSkills: ["React", "Node.js", "TypeScript", "Redux", "Docker"],
+        overallAtsScore: 92,
+        recommendedRole: "Senior Full Stack Engineer"
+      }
+    },
+    {
+      id: "seeker-mock-2",
+      fullName: "Sarah Chen",
+      role: "seeker",
+      email: "sarah.chen@email.com",
+      resumeText: "Backend Engineer. Specialized in Python, Django, PostgreSQL, and AWS cloud migrations. Built secure APIs.",
+      analysis: {
+        parsedSkills: ["Python", "Django", "PostgreSQL", "AWS", "APIs"],
+        overallAtsScore: 88,
+        recommendedRole: "Backend Engineer"
+      }
+    },
+    {
+      id: "seeker-mock-3",
+      fullName: "Marcus Thompson",
+      role: "seeker",
+      email: "marcus.t@email.com",
+      resumeText: "UI/UX Front-End Developer with passion for CSS, Tailwind, Vue, React, Figma. 3 years experience building responsive designs.",
+      analysis: {
+        parsedSkills: ["Tailwind", "React", "Vue", "Figma", "CSS"],
+        overallAtsScore: 84,
+        recommendedRole: "Frontend Engineer"
+      }
+    }
+  ];
+
+  const allSeekers = [...seekers];
+  mockSeekers.forEach(ms => {
+    if (!allSeekers.find(s => s.fullName.toLowerCase() === ms.fullName.toLowerCase())) {
+      allSeekers.push(ms);
+    }
+  });
+
+  // Score candidate seekers against the job specification
+  const preScoredSeekers = allSeekers.map(seeker => {
+    const seekerSkills = seeker.analysis?.parsedSkills || seeker.preferences?.skills || ["React", "TypeScript"];
+    const seekerSkillsLower = seekerSkills.map((s: string) => s.toLowerCase());
+
+    const matchedSkills = seekerSkills.filter((sk: string) => 
+      targetSkillsLower.some((ts: string) => ts.includes(sk.toLowerCase()) || sk.toLowerCase().includes(ts)) ||
+      (jobDescription || "").toLowerCase().includes(sk.toLowerCase())
+    );
+
+    let baselineScore = 50;
+    if (targetSkillsLower.length > 0) {
+      const matchCount = targetSkillsLower.filter((ts: string) => 
+        seekerSkillsLower.some((ss: string) => ss.includes(ts) || ts.includes(ss)) ||
+        (seeker.resumeText || "").toLowerCase().includes(ts)
+      ).length;
+      baselineScore = Math.round((matchCount / targetSkillsLower.length) * 100);
+    } else {
+      const overlapCount = seekerSkillsLower.filter((ss: string) => 
+        (jobDescription || "").toLowerCase().includes(ss)
+      ).length;
+      baselineScore = Math.round((overlapCount / Math.max(1, seekerSkillsLower.length)) * 100);
+    }
+
+    let aggregateScore = Math.max(15, Math.min(98, baselineScore));
+
+    return {
+      seeker,
+      matchedSkills,
+      aggregateScore
+    };
+  });
+
+  const sortedPreScored = [...preScoredSeekers].sort((a, b) => b.aggregateScore - a.aggregateScore);
+  const topAISelection = sortedPreScored.slice(0, 15);
+
+  try {
+    const ai = getGeminiClient();
+    const systemPrompt = `You are a world-class talent acquisition recruiter AI. Evaluate each candidate profile against the provided Job Description & required skills. Calculate an exact fit score (0 to 100), detailed matching skills (present in both seeker profile and job spec), missing skills, and 2 concise, highly professional reasons. Return the results strictly conforming to the requested JSON object format containing a "matches" array.`;
+
+    const simplifiedCandidates = topAISelection.map(item => ({
+      id: item.seeker.id || item.seeker.email,
+      fullName: item.seeker.fullName,
+      skills: item.seeker.analysis?.parsedSkills || item.seeker.preferences?.skills || ["React"],
+      resumeText: item.seeker.resumeText || ""
+    }));
+
+    const modelResponse = await ai.models.generateContent({
+      model: "gemini-3.5-flash",
+      contents: `Job Title: ${jobTitle}\nRequired Skills: ${JSON.stringify(targetSkills)}\nJob Description:\n${jobDescription || ''}\n\nCandidates Catalog:\n${JSON.stringify(simplifiedCandidates)}`,
+      config: {
+        systemInstruction: systemPrompt,
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            matches: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  seekerId: { type: Type.STRING, description: "The ID of the candidate evaluated." },
+                  score: { type: Type.INTEGER, description: "Candidate fit score out of 100." },
+                  reasons: { 
+                    type: Type.ARRAY, 
+                    items: { type: Type.STRING },
+                    description: "Exactly 2 clear, professional recruiter explanations why this seeker is a match or gap fit."
+                  },
+                  matchingSkills: { 
+                    type: Type.ARRAY, 
+                    items: { type: Type.STRING },
+                    description: "Skills the candidate possesses that match this job spec."
+                  },
+                  missingSkills: { 
+                    type: Type.ARRAY, 
+                    items: { type: Type.STRING },
+                    description: "Required skills for this job spec that the candidate seems to lack."
+                  }
+                },
+                required: ["seekerId", "score", "reasons", "matchingSkills", "missingSkills"]
+              }
+            }
+          },
+          required: ["matches"]
+        }
+      }
+    });
+
+    const matchesResult = JSON.parse(modelResponse.text || '{"matches":[]}');
+    const enrichedMatched = matchesResult.matches.map((m: any) => {
+      const parentSeeker = allSeekers.find(s => s.id === m.seekerId || s.email === m.seekerId);
+      return {
+        ...m,
+        seeker: parentSeeker
+      };
+    }).filter((m: any) => m.seeker !== undefined);
+
+    return res.json({ matches: enrichedMatched });
+
+  } catch (error: any) {
+    console.warn("AI Candidate Sourcing matching error, resorting to local fallback:", error.message || error);
+    
+    const fallbackMatches = topAISelection.map(item => {
+      const seeker = item.seeker;
+      const matchingSkills = item.matchedSkills;
+      const allSeekerSkills = seeker.analysis?.parsedSkills || seeker.preferences?.skills || ["React"];
+      const missingSkills = targetSkills.filter((ts: string) => !allSeekerSkills.some((ss: string) => ss.toLowerCase() === ts.toLowerCase()));
+
+      return {
+        seekerId: seeker.id || seeker.email,
+        score: item.aggregateScore,
+        reasons: [
+          `Matched candidate on key technical stack including ${matchingSkills.slice(0, 3).join(", ") || "core principles"}.`,
+          `Candidate demonstrates target resume overlap for role alignment.`
+        ],
+        matchingSkills,
+        missingSkills,
+        seeker
+      };
+    });
+
+    return res.json({ matches: fallbackMatches });
+  }
+});
+
 // 3.5. Get notifications for the currently logged-in user
 app.get("/api/notifications", authenticateToken, async (req: any, res) => {
   if (!db.notifications) db.notifications = [];

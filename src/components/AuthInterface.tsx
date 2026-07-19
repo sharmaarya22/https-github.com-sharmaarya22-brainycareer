@@ -578,17 +578,11 @@ export default function AuthInterface({ onAuthSuccess }: AuthInterfaceProps) {
           </div>
 
           <div className="space-y-3">
-            <h4 className="font-extrabold uppercase text-slate-400 tracking-wider text-[10px]">Special Administrator</h4>
+            <h4 className="font-extrabold uppercase text-slate-400 tracking-wider text-[10px]">Secure Access</h4>
             <div className="bg-slate-800/50 p-4.5 rounded-xl border border-slate-700/50 space-y-2">
               <p className="text-slate-350 text-[10px] leading-relaxed">
-                Log in as super-administrator to access the telemetry, users tracking, and subscription logs.
+                Registered administrator or enterprise dashboard profiles have access protected with standard secure tokens.
               </p>
-              <button 
-                onClick={() => fillCredentials('admin')}
-                className="w-full text-center py-1.5 bg-indigo-650 hover:bg-indigo-700 text-white font-bold text-[10px] rounded-lg cursor-pointer transition-all uppercase tracking-wider"
-              >
-                Super Admin Fill
-              </button>
             </div>
           </div>
         </div>
@@ -722,35 +716,6 @@ export default function AuthInterface({ onAuthSuccess }: AuthInterfaceProps) {
                     placeholder="••••••"
                     className="block w-full pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 font-semibold text-slate-900"
                   />
-                </div>
-              </div>
-
-              {/* Demo Fillers inside modal (Helper for UAT testing) */}
-              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-1.5">
-                <span className="text-[9px] font-black text-slate-500 block uppercase tracking-wider">
-                  ⚡ Quick Demo Credentials Fillers
-                </span>
-                <div className="grid grid-cols-2 gap-1.5 font-sans">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEmail('upretigaurav@gmail.com');
-                      setPassword('123456');
-                    }}
-                    className="py-1 bg-white hover:bg-slate-100 border border-slate-200 rounded text-[9.5px] font-bold text-slate-700 cursor-pointer text-center"
-                  >
-                    Demo Job Seeker
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEmail('employer@brainycareer.com');
-                      setPassword('123456');
-                    }}
-                    className="py-1 bg-white hover:bg-slate-100 border border-slate-200 rounded text-[9.5px] font-bold text-slate-700 cursor-pointer text-center"
-                  >
-                    Demo Employer
-                  </button>
                 </div>
               </div>
 

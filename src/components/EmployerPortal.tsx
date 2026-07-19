@@ -28,7 +28,7 @@ export default function EmployerPortal({
   onShowToast,
   onNavigatePricing
 }: EmployerPortalProps) {
-  const [activeTab, setActiveTab] = useState<'applicants' | 'listings' | 'interview_assistant'>('applicants');
+  const [activeTab, setActiveTab] = useState<'applicants' | 'listings' | 'interview_assistant' | 'job_spec_matcher'>('applicants');
   const [companyProfile, setCompanyProfile] = useState({
     name: "Brainy Career Corp",
     logoURL: "",
@@ -58,6 +58,17 @@ export default function EmployerPortal({
   const [candMatches, setCandMatches] = useState<any[]>([]);
   const [isMatchingCandidate, setIsMatchingCandidate] = useState(false);
   const [matchError, setMatchError] = useState<string | null>(null);
+
+  // Job Spec Candidate Sourcing state variables
+  const [jobSpecTitle, setJobSpecTitle] = useState('');
+  const [jobSpecSkills, setJobSpecSkills] = useState('');
+  const [jobSpecDescription, setJobSpecDescription] = useState('');
+  const [jobSpecMatches, setJobSpecMatches] = useState<any[]>([]);
+  const [isMatchingJobSpec, setIsMatchingJobSpec] = useState(false);
+  const [matchJobSpecError, setMatchJobSpecError] = useState<string | null>(null);
+  const [uploadedDocName, setUploadedDocName] = useState<string>('');
+  const [invitationTexts, setInvitationTexts] = useState<{ [key: string]: string }>({});
+  const [sendingInvitationIds, setSendingInvitationIds] = useState<{ [key: string]: boolean }>({});
 
   // Local applicants list (with initial fallback/mock seekers, strictly excluding Gaurav!)
   const [applicants, setApplicants] = useState<any[]>([
@@ -554,6 +565,168 @@ export default function EmployerPortal({
     }
   };
 
+  // Handle uploaded job spec document parsing
+  const handleJobSpecFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploadedDocName(file.name);
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const text = event.target?.result as string;
+      if (text) {
+        setJobSpecDescription(text);
+        if (onShowToast) {
+          onShowToast("Document Parsed", `Loaded content from ${file.name} successfully!`);
+        }
+      }
+    };
+    reader.onerror = () => {
+      alert("Failed to read the file.");
+    };
+    reader.readAsText(file);
+  };
+
+  // Core candidate matching execution
+  const handleMatchJobSpecWithAI = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!jobSpecTitle.trim()) {
+      alert("Job title is required.");
+      return;
+    }
+
+    setIsMatchingJobSpec(true);
+    setMatchJobSpecError(null);
+    setJobSpecMatches([]);
+
+    try {
+      const response = await fetch('/api/employer/match-seekers', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          jobTitle: jobSpecTitle.trim(),
+          skills: jobSpecSkills,
+          jobDescription: jobSpecDescription.trim()
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to run candidate sourcing matching.");
+      }
+
+      const matchData = await response.json();
+      setJobSpecMatches(matchData.matches || []);
+      if (onShowToast) {
+        onShowToast("Analysis Completed", `Found ${matchData.matches?.length || 0} matched seeker profiles!`);
+      }
+    } catch (err: any) {
+      console.error(err);
+      setMatchJobSpecError(err.message || "An unexpected error occurred during AI matchmaking.");
+    } finally {
+      setIsMatchingJobSpec(false);
+    }
+  };
+
+  // Switch tabs and initialize deep chat context with matched seeker
+  const handleStartChatWithSeeker = (seeker: any) => {
+    // Ensure seeker exists in candidates list
+    const exists = applicants.find(a => a.id === seeker.id || a.fullName.toLowerCase() === seeker.fullName.toLowerCase());
+    if (!exists) {
+      setApplicants(prev => [
+        {
+          id: seeker.id || `app-${Date.now()}`,
+          fullName: seeker.fullName,
+          skills: seeker.analysis?.parsedSkills || seeker.preferences?.skills || ["React", "TypeScript"],
+          atsScore: seeker.analysis?.overallAtsScore || 85,
+          culturalFit: 85,
+          experienceLevel: "Mid",
+          suitability: "Highly Suitable",
+          strength: seeker.analysis?.executiveStrategicSummary || "Strong development profile matched via Job Spec Sourcing.",
+          gap: "Verified fit.",
+          status: "UNDER_REVIEW",
+          resumeFileName: seeker.resumeFileName || "resume.txt",
+          resumeText: seeker.resumeText || ""
+        },
+        ...prev
+      ]);
+    }
+    
+    setSelectedApplicant(exists || {
+      id: seeker.id || `app-${Date.now()}`,
+      fullName: seeker.fullName,
+      skills: seeker.analysis?.parsedSkills || seeker.preferences?.skills || ["React", "TypeScript"],
+      atsScore: seeker.analysis?.overallAtsScore || 85,
+      culturalFit: 85,
+      experienceLevel: "Mid",
+      suitability: "Highly Suitable",
+      strength: seeker.analysis?.executiveStrategicSummary || "Strong development profile matched via Job Spec Sourcing.",
+      gap: "Verified fit.",
+      status: "UNDER_REVIEW",
+      resumeFileName: seeker.resumeFileName || "resume.txt",
+      resumeText: seeker.resumeText || ""
+    });
+
+    setActiveTab('applicants');
+
+    if (onShowToast) {
+      onShowToast("Chat Activated", `Started instant messaging context with ${seeker.fullName}!`);
+    }
+  };
+
+  // Dispatch inline recruiter message without leaving candidate match dashboard
+  const handleSendInlineInvitation = async (seeker: any) => {
+    const seekerId = seeker.id || seeker.email;
+    const text = invitationTexts[seekerId]?.trim();
+    if (!text) {
+      alert("Please enter a message to send.");
+      return;
+    }
+
+    setSendingInvitationIds(prev => ({ ...prev, [seekerId]: true }));
+    try {
+      const response = await fetch('/api/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          receiverId: seeker.id || seekerId,
+          jobId: 'general',
+          content: text
+        })
+      });
+
+      if (response.ok) {
+        setInvitationTexts(prev => ({ ...prev, [seekerId]: '' }));
+        // Refresh messages list
+        const msgRes = await fetch('/api/messages', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (msgRes.ok) {
+          const mData = await msgRes.json();
+          setMessages(mData.messages || []);
+        }
+
+        if (onShowToast) {
+          onShowToast("Inquiry Dispatched", `Your message was successfully sent to ${seeker.fullName}!`);
+        }
+      } else {
+        const errData = await response.json();
+        alert(errData.error || "Failed to send message.");
+      }
+    } catch (err: any) {
+      console.error(err);
+      alert("Error sending message: " + err.message);
+    } finally {
+      setSendingInvitationIds(prev => ({ ...prev, [seekerId]: false }));
+    }
+  };
+
   // Filter messages for current selected seeker thread
   const filteredChats = selectedApplicant ? messages.filter(
     (m: any) => (m.senderId === user.id && m.receiverId === selectedApplicant.id) || 
@@ -620,14 +793,14 @@ export default function EmployerPortal({
           </button>
 
           <button 
-            onClick={() => setActiveTab('dynamic_matcher')}
+            onClick={() => setActiveTab('job_spec_matcher')}
             className={`px-4.5 py-2 rounded-xl transition-all cursor-pointer ${
-              activeTab === 'dynamic_matcher' 
+              activeTab === 'job_spec_matcher' 
                 ? 'bg-white text-indigo-600 shadow-sm font-extrabold' 
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >
-            Direct Employee Matcher
+            Job Spec Candidate Matcher
           </button>
         </div>
       </div>
@@ -1175,133 +1348,203 @@ export default function EmployerPortal({
         </div>
       )}
 
-      {/* 4. DIRECT EMPLOYEE/CANDIDATE MATCHER TAB */}
-      {activeTab === 'dynamic_matcher' && (
+      {/* 4. JOB SPECIFICATION / DOCUMENT SOURCING CANDIDATE MATCHER */}
+      {activeTab === 'job_spec_matcher' && (
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-8 items-start">
           
-          {/* Left panel: Candidate/Employee upload & detail form */}
+          {/* Left panel: Paste job spec details or drag & drop document */}
           <div className="lg:col-span-2 border border-slate-200 bg-white p-6 rounded-3xl space-y-6 shadow-sm">
             <div>
               <h3 className="text-base font-bold text-slate-950 uppercase tracking-wider flex items-center gap-1.5">
-                <Users className="w-5 h-5 text-indigo-600" />
-                Upload Employee / Candidate details
+                <FileText className="w-5 h-5 text-indigo-600" />
+                Input Job Specification
               </h3>
-              <p className="text-xs text-slate-500 mt-1">Enter candidate background, experiences, and core skills to evaluate alignment with your open job listings instantly.</p>
+              <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                Paste job details and skills or upload a spec document below. Our advanced recruitment AI will analyze the details and automatically map them against all available seeker profiles in the database.
+              </p>
             </div>
 
-            <form onSubmit={handleMatchCandidateWithAI} className="space-y-4">
+            <form onSubmit={handleMatchJobSpecWithAI} className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1.5">Candidate Full Name</label>
+                <label className="block text-xs font-bold text-slate-600 mb-1.5">Target Job Title</label>
                 <input
                   type="text"
                   required
-                  value={candName}
-                  onChange={(e) => setCandName(e.target.value)}
-                  placeholder="e.g., Jane Miller"
+                  value={jobSpecTitle}
+                  onChange={(e) => setJobSpecTitle(e.target.value)}
+                  placeholder="e.g., Senior React Engineer, Backend Architect"
                   className="w-full bg-slate-50 border border-slate-200 px-3.5 py-2.5 rounded-xl text-sm focus:ring-2 focus:ring-indigo-600 outline-none text-slate-900 font-semibold"
                 />
-              </div>
-
-              <div className="grid grid-cols-1 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-slate-600 mb-1.5">Experience Seniority Tier</label>
-                  <select
-                    value={candExp}
-                    onChange={(e: any) => setCandExp(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 px-3 py-2.5 rounded-xl text-sm focus:ring-2 focus:ring-indigo-600 outline-none text-slate-900 font-bold cursor-pointer"
-                  >
-                    <option value="Entry">Entry (0-2 years)</option>
-                    <option value="Mid">Mid Level (2-5 years)</option>
-                    <option value="Senior">Senior Elite (5+ years)</option>
-                  </select>
-                </div>
               </div>
 
               <div>
                 <label className="block text-xs font-bold text-slate-600 mb-1.5">Key Core Skills (comma-separated)</label>
                 <input
                   type="text"
-                  required
-                  value={candSkills}
-                  onChange={(e) => setCandSkills(e.target.value)}
-                  placeholder="e.g., React, Node.js, Express, PostgreSQL"
+                  value={jobSpecSkills}
+                  onChange={(e) => setJobSpecSkills(e.target.value)}
+                  placeholder="e.g., React, TypeScript, Node.js, AWS, PostgreSQL"
                   className="w-full bg-slate-50 border border-slate-200 px-3.5 py-2.5 rounded-xl text-sm focus:ring-2 focus:ring-indigo-600 outline-none text-slate-900 font-semibold"
                 />
               </div>
 
+              {/* Document drag & drop dropzone */}
               <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1.5">Paste Resume Text or Professional Profile Details</label>
+                <label className="block text-xs font-bold text-slate-600 mb-1.5">Upload Job Description Document</label>
+                <div 
+                  className={`border-2 border-dashed rounded-2xl p-4 text-center cursor-pointer transition-all ${
+                    uploadedDocName 
+                      ? 'border-indigo-500 bg-indigo-50/40 text-indigo-800' 
+                      : 'border-slate-300 hover:border-indigo-400 bg-slate-50/50 hover:bg-slate-50 text-slate-500'
+                  }`}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const file = e.dataTransfer.files?.[0];
+                    if (file) {
+                      setUploadedDocName(file.name);
+                      const reader = new FileReader();
+                      reader.onload = (event) => {
+                        const text = event.target?.result as string;
+                        if (text) {
+                          setJobSpecDescription(text);
+                          if (onShowToast) {
+                            onShowToast("Document Dropped", `Successfully loaded content from ${file.name}!`);
+                          }
+                        }
+                      };
+                      reader.readAsText(file);
+                    }
+                  }}
+                  onClick={() => {
+                    const el = document.getElementById('job-spec-file-input');
+                    if (el) el.click();
+                  }}
+                >
+                  <input 
+                    id="job-spec-file-input" 
+                    type="file" 
+                    className="hidden" 
+                    onChange={handleJobSpecFileUpload} 
+                    accept=".txt,.md,.json,.csv,.rtf"
+                  />
+                  {uploadedDocName ? (
+                    <div className="space-y-1.5">
+                      <CheckCircle2 className="w-8 h-8 text-indigo-600 mx-auto animate-bounce" />
+                      <p className="text-xs font-extrabold text-indigo-950">{uploadedDocName}</p>
+                      <button 
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setUploadedDocName('');
+                          setJobSpecDescription('');
+                        }}
+                        className="text-[10px] text-red-500 hover:underline font-black uppercase tracking-wider block mx-auto"
+                      >
+                        Remove Document
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-1.5 py-1">
+                      <Download className="w-7 h-7 text-slate-400 mx-auto" />
+                      <p className="text-xs font-bold text-slate-700">Drag & drop job spec document, or <span className="text-indigo-600">browse files</span></p>
+                      <p className="text-[10px] text-slate-450">Supports txt, md, json, csv and plain text logs</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <div className="flex justify-between items-center mb-1.5">
+                  <label className="block text-xs font-bold text-slate-600">Job Description details</label>
+                  {jobSpecDescription && (
+                    <span className="text-[10px] font-mono font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded">
+                      {jobSpecDescription.length} characters parsed
+                    </span>
+                  )}
+                </div>
                 <textarea
-                  rows={6}
-                  value={candResumeText}
-                  onChange={(e) => setCandResumeText(e.target.value)}
-                  placeholder="Paste work experience, past roles, or complete resume details here to power deep semantic AI matching..."
-                  className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl text-sm focus:ring-2 focus:ring-indigo-600 outline-none text-slate-900 font-medium resize-none shadow-inner"
+                  rows={7}
+                  value={jobSpecDescription}
+                  onChange={(e) => setJobSpecDescription(e.target.value)}
+                  placeholder="Paste details of the role description, daily duties, team alignment, or qualifications here to feed semantic matching..."
+                  className="w-full bg-slate-50 border border-slate-200 p-3.5 rounded-xl text-sm focus:ring-2 focus:ring-indigo-600 outline-none text-slate-900 font-medium resize-none shadow-inner"
                 />
               </div>
 
               <button
-                id="evaluate-candidate-ai-btn"
                 type="submit"
-                disabled={isMatchingCandidate}
-                className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-sm transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 shadow-md shadow-indigo-100"
+                disabled={isMatchingJobSpec}
+                className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-xl text-sm transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 shadow-md shadow-indigo-100"
               >
-                <Sparkles className="w-4 h-4" />
-                <span>{isMatchingCandidate ? "AI Matchmaker running..." : "Evaluate & List Best Matches"}</span>
+                <Sparkles className="w-4 h-4 text-white animate-spin-slow" />
+                <span>{isMatchingJobSpec ? "AI Recruiting Engine Sourcing..." : "Analyze Spec & Match Seeker Profiles"}</span>
               </button>
             </form>
           </div>
 
-          {/* Right panel: Live Matchmaking ratings */}
+          {/* Right panel: Ranked matching candidate profiles */}
           <div className="lg:col-span-3 border border-slate-200 bg-white p-6 rounded-3xl space-y-6 shadow-sm min-h-[500px]">
             <div>
-              <h3 className="text-base font-bold text-slate-950 uppercase tracking-wider flex items-center gap-1">
-                <Briefcase className="w-5 h-5 text-indigo-600" />
-                AI Job Matchmaker Report Card
+              <h3 className="text-base font-bold text-slate-950 uppercase tracking-wider flex items-center gap-1.5">
+                <Users className="w-5 h-5 text-indigo-600" />
+                Best Match Job Seeker Profiles
               </h3>
-              <p className="text-xs text-slate-500 mt-1 leading-relaxed">Dynamic semantic AI evaluation. Your posted jobs are automatically indexed and compared against candidate qualifications.</p>
+              <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                Ranked alignment of candidates in the portal database mapped against your uploaded job specification. Start chats or send direct recruitment invites below.
+              </p>
             </div>
 
-            {isMatchingCandidate ? (
-              <div className="flex flex-col items-center justify-center py-20 space-y-4">
+            {isMatchingJobSpec ? (
+              <div className="flex flex-col items-center justify-center py-28 space-y-4">
                 <div className="relative w-12 h-12">
                   <div className="absolute inset-0 rounded-full border-4 border-indigo-100 animate-pulse"></div>
                   <div className="absolute inset-0 rounded-full border-4 border-indigo-600 border-t-transparent animate-spin"></div>
                 </div>
                 <div className="text-center">
-                  <p className="text-sm font-extrabold text-slate-800 animate-pulse">Running AI Career Matchmaking Algorithm...</p>
-                  <p className="text-xs text-slate-500 mt-1">Analyzing candidate resume details against active vacancy specifications</p>
+                  <p className="text-sm font-extrabold text-slate-800 animate-pulse">Analyzing Candidate Resumes & Preferences...</p>
+                  <p className="text-xs text-slate-500 mt-1">AI semantic ranking mapping seeker metrics directly onto spec requirements</p>
                 </div>
               </div>
-            ) : matchError ? (
-              <div className="p-4 bg-red-50 border border-red-100 rounded-2xl flex items-start gap-3 text-red-700 text-xs font-semibold">
+            ) : matchJobSpecError ? (
+              <div className="p-4 bg-red-50 border border-red-100 rounded-2xl flex items-start gap-3 text-red-700 text-xs font-semibold animate-shake">
                 <AlertCircle className="w-5 h-5 text-red-500 shrink-0" />
                 <div>
-                  <span className="font-extrabold block">Matchmaker Error</span>
-                  <p className="mt-0.5">{matchError}</p>
+                  <span className="font-extrabold block">Sourcing Matcher Error</span>
+                  <p className="mt-0.5">{matchJobSpecError}</p>
                 </div>
               </div>
-            ) : candMatches.length > 0 ? (
-              <div className="space-y-4 max-h-[600px] overflow-y-auto pr-1">
-                {candMatches.map((matchItem: any, index: number) => {
-                  const job = matchItem.job;
+            ) : jobSpecMatches.length > 0 ? (
+              <div className="space-y-5 max-h-[680px] overflow-y-auto pr-1">
+                {jobSpecMatches.map((matchItem: any, index: number) => {
+                  const seeker = matchItem.seeker;
                   const score = matchItem.score;
+                  const seekerId = seeker.id || seeker.email;
+                  const currentInvitationText = invitationTexts[seekerId] || '';
+                  const isSendingInvitation = sendingInvitationIds[seekerId] || false;
+
                   return (
-                    <div key={job.id} className="p-5 bg-slate-50 border border-slate-200 rounded-2xl space-y-4 hover:border-indigo-200 hover:bg-slate-50/50 transition-all shadow-2xs">
+                    <div key={seekerId} className="p-5.5 bg-slate-50 border border-slate-200 rounded-2xl space-y-4 hover:border-indigo-300 hover:bg-slate-50/50 transition-all shadow-2xs">
                       
-                      {/* Top Job/Score bar */}
+                      {/* Seeker Profile details / Rank / score bar */}
                       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pb-3 border-b border-slate-150">
                         <div>
                           <div className="flex items-center gap-1.5 flex-wrap">
                             <span className="text-[10px] font-mono font-black text-indigo-700 bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded uppercase">Rank #{index + 1}</span>
-                            <h4 className="text-sm font-black text-slate-900 leading-tight">{job.title}</h4>
+                            <h4 className="text-sm font-black text-slate-900 leading-tight">{seeker.fullName}</h4>
                           </div>
-                          <p className="text-xs text-slate-500 font-semibold mt-1">{job.company} • <span className="font-mono text-[11px]">{job.location} ({job.locationModel})</span></p>
+                          <p className="text-xs text-slate-500 font-semibold mt-1">
+                            {seeker.email} • Candidate Role: <span className="font-bold text-slate-700">{seeker.analysis?.recommendedRole || 'Job Seeker'}</span>
+                          </p>
                         </div>
                         
                         <div className="text-right shrink-0">
                           <span className={`text-lg font-black tracking-tight ${score >= 80 ? 'text-emerald-600' : score >= 50 ? 'text-indigo-600' : 'text-slate-500'}`}>
-                            {score}% Match
+                            {score}% AI Fit
                           </span>
                           <div className="w-24 bg-slate-200 h-1.5 rounded-full overflow-hidden mt-1">
                             <div 
@@ -1312,11 +1555,11 @@ export default function EmployerPortal({
                         </div>
                       </div>
 
-                      {/* Matching / Missing Skill Tags */}
+                      {/* Matching and missing skills tags list */}
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs font-semibold">
                         <div className="space-y-1">
                           <span className="text-[10px] text-emerald-800 uppercase font-mono tracking-wider flex items-center gap-1 font-black">
-                            <Check className="w-3.5 h-3.5 text-emerald-600" />
+                            <Check className="w-3.5 h-3.5 text-emerald-600 animate-pulse" />
                             Matching Core Skills ({matchItem.matchingSkills?.length || 0})
                           </span>
                           <div className="flex flex-wrap gap-1 pt-1">
@@ -1327,7 +1570,7 @@ export default function EmployerPortal({
                                 </span>
                               ))
                             ) : (
-                              <span className="text-[11px] text-slate-400 font-medium italic">No precise skill overlaps detected</span>
+                              <span className="text-[11px] text-slate-400 font-medium italic">No direct skill overlaps identified</span>
                             )}
                           </div>
                         </div>
@@ -1335,7 +1578,7 @@ export default function EmployerPortal({
                         <div className="space-y-1">
                           <span className="text-[10px] text-amber-800 uppercase font-mono tracking-wider flex items-center gap-1 font-black">
                             <AlertCircle className="w-3 h-3 text-amber-500" />
-                            Missing Core Skills ({matchItem.missingSkills?.length || 0})
+                            Missing Spec Skills ({matchItem.missingSkills?.length || 0})
                           </span>
                           <div className="flex flex-wrap gap-1 pt-1">
                             {matchItem.missingSkills && matchItem.missingSkills.length > 0 ? (
@@ -1351,9 +1594,9 @@ export default function EmployerPortal({
                         </div>
                       </div>
 
-                      {/* AI Reasons Bullet Explanations */}
-                      <div className="space-y-1.5 pt-1.5 border-t border-slate-150">
-                        <span className="text-[9.5px] uppercase font-mono tracking-widest text-slate-400 block font-black">AI RECRUITER ASSESSMENT</span>
+                      {/* AI assessment bullets */}
+                      <div className="space-y-1.5 pt-2 border-t border-slate-150">
+                        <span className="text-[9px] uppercase font-mono tracking-widest text-slate-400 block font-black">AI SOURCING ASSESSMENT</span>
                         <ul className="space-y-1 text-xs text-slate-700 font-medium">
                           {matchItem.reasons && matchItem.reasons.map((re: string, i: number) => (
                             <li key={i} className="flex items-start gap-2">
@@ -1364,6 +1607,50 @@ export default function EmployerPortal({
                         </ul>
                       </div>
 
+                      {/* Interactive messaging: Send message inline or switch to Chat */}
+                      <div className="pt-3 border-t border-slate-150 space-y-3 bg-white p-3 rounded-xl border border-slate-200">
+                        <div className="flex justify-between items-center">
+                          <span className="text-[10.5px] font-bold text-slate-700 flex items-center gap-1">
+                            <MessageSquare className="w-3.5 h-3.5 text-indigo-500" />
+                            Send Recruitment Inquiry / Message Inline:
+                          </span>
+                          
+                          <button
+                            type="button"
+                            onClick={() => handleStartChatWithSeeker(seeker)}
+                            className="text-xs text-indigo-600 hover:text-indigo-700 font-bold flex items-center gap-1 cursor-pointer bg-slate-50 hover:bg-indigo-50 px-2 py-1 rounded"
+                          >
+                            <Play className="w-3 h-3 text-indigo-500" />
+                            <span>Switch to Real-Time Chat View</span>
+                          </button>
+                        </div>
+
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={currentInvitationText}
+                            onChange={(e) => {
+                              setInvitationTexts(prev => ({ ...prev, [seekerId]: e.target.value }));
+                            }}
+                            placeholder={`e.g., Hi ${seeker.fullName}! We read your profile and would love to interview you for the ${jobSpecTitle} role.`}
+                            className="flex-1 bg-slate-50 border border-slate-200 px-3 py-2 rounded-lg text-xs font-semibold text-slate-900 focus:outline-none focus:ring-1 focus:ring-indigo-600"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleSendInlineInvitation(seeker)}
+                            disabled={isSendingInvitation || !currentInvitationText.trim()}
+                            className="bg-indigo-650 hover:bg-indigo-700 disabled:opacity-40 text-white px-4 py-2 rounded-lg text-xs font-black transition-all flex items-center gap-1 cursor-pointer"
+                          >
+                            {isSendingInvitation ? (
+                              <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                            ) : (
+                              <Send className="w-3.5 h-3.5" />
+                            )}
+                            <span>Send</span>
+                          </button>
+                        </div>
+                      </div>
+
                     </div>
                   );
                 })}
@@ -1371,8 +1658,10 @@ export default function EmployerPortal({
             ) : (
               <div className="h-96 border border-slate-200 border-dashed rounded-3xl flex flex-col items-center justify-center text-slate-400 text-sm font-medium p-6 text-center">
                 <Sparkles className="w-8 h-8 text-indigo-400 animate-pulse mb-3" />
-                <p>No matchmaking report generated yet.</p>
-                <p className="text-xs text-slate-400 max-w-xs mt-1.5">Enter candidate details on the left, then click "Evaluate & List Best Matches" to analyze job suitability instantly.</p>
+                <p>No matchmaking candidates lists sourced yet.</p>
+                <p className="text-xs text-slate-450 max-w-xs mt-1.5 leading-relaxed">
+                  Provide job parameters and click "Analyze Spec & Match Seeker Profiles" to fetch candidates aligned with your specifications instantly!
+                </p>
               </div>
             )}
           </div>
