@@ -397,6 +397,138 @@ EDUCATION & CERTIFICATION PATHWAYS:
     }).length;
   };
 
+  // Export cover letter as Word DOCX
+  const downloadDocx = () => {
+    if (!customLetterText || !selectedJobForLetter) return;
+    const company = selectedJobForLetter.company || "Company";
+    const role = selectedJobForLetter.title || "Role";
+    
+    const htmlContent = `
+      <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
+      <head>
+        <title>Cover Letter - ${company} - ${role}</title>
+        <style>
+          body { font-family: 'Arial', sans-serif; line-height: 1.6; margin: 1in; color: #333333; }
+          p { margin-bottom: 12pt; text-align: justify; }
+          .header { border-bottom: 2px solid #4F46E5; padding-bottom: 10px; margin-bottom: 20px; }
+          .title { font-size: 18pt; font-weight: bold; color: #1E293B; }
+          .meta { font-size: 10pt; color: #64748B; margin-top: 5px; }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <div class="title">Cover Letter</div>
+          <div class="meta">Generated for ${company} - ${role} via BrainyCareer.com</div>
+        </div>
+        ${customLetterText.split('\n').map(line => line.trim() ? `<p>${line}</p>` : `<p>&nbsp;</p>`).join('')}
+      </body>
+      </html>
+    `;
+    const blob = new Blob(['\ufeff' + htmlContent], { type: 'application/msword' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Cover_Letter_${company.replace(/\s+/g, '_')}.doc`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  // Print or Export cover letter as vector PDF via iframe
+  const downloadPdf = () => {
+    if (!customLetterText || !selectedJobForLetter) return;
+    const company = selectedJobForLetter.company || "Company";
+    const role = selectedJobForLetter.title || "Role";
+    
+    const iframe = document.createElement('iframe');
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = '0';
+    document.body.appendChild(iframe);
+    
+    const iframeDoc = iframe.contentWindow?.document || iframe.contentDocument;
+    if (!iframeDoc) return;
+    
+    const formattedContent = customLetterText.split('\n').map(line => line.trim() ? `<p>${line}</p>` : `<p>&nbsp;</p>`).join('');
+    
+    iframeDoc.write(`
+      <html>
+      <head>
+        <title>Cover Letter - ${company} - ${role}</title>
+        <style>
+          @page { size: A4; margin: 20mm; }
+          body { 
+            font-family: 'Inter', -apple-system, sans-serif; 
+            color: #1e293b; 
+            line-height: 1.6; 
+            margin: 0; 
+            padding: 0;
+            background: #ffffff;
+            font-size: 11pt;
+          }
+          .header { 
+            border-bottom: 2px solid #2563eb; 
+            padding-bottom: 12px; 
+            margin-bottom: 24px; 
+          }
+          .brand {
+            font-size: 14pt;
+            font-weight: 800;
+            color: #2563eb;
+            letter-spacing: -0.025em;
+          }
+          .meta { 
+            font-size: 9pt; 
+            color: #64748b; 
+            margin-top: 4px; 
+          }
+          .content {
+            margin-top: 20px;
+          }
+          p { 
+            margin-bottom: 12pt; 
+            text-align: justify; 
+            text-justify: inter-word;
+          }
+          .footer {
+            margin-top: 40px;
+            border-top: 1px solid #e2e8f0;
+            padding-top: 12px;
+            font-size: 8.5pt;
+            color: #94a3b8;
+            text-align: center;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <div class="brand">BrainyCareer.com AI Cover Letter</div>
+          <div class="meta">Target Position: <strong>${role}</strong> at <strong>${company}</strong></div>
+        </div>
+        <div class="content">
+          ${formattedContent}
+        </div>
+        <div class="footer">
+          Generated securely via BrainyCareer.com Career Operating System
+        </div>
+        <script>
+          window.onload = function() {
+            window.print();
+            setTimeout(function() {
+              window.parent.document.body.removeChild(window.frameElement);
+            }, 100);
+          }
+        </script>
+      </body>
+      </html>
+    `);
+    iframeDoc.close();
+  };
+
   // Generate cover letter
   const triggerLetterGen = async () => {
     if (!selectedJobForLetter) return;
@@ -1855,21 +1987,22 @@ ${user.fullName}
         </div>
       )}
 
-      {seekerTab === 'letters' && currentPlan === 'Free' && (
-        <PremiumLockPlaceholder 
-          featureName="AI Cover Letter Studio" 
-          onGoToPricing={onNavigatePricing || (() => {})} 
-        />
-      )}
-
-      {seekerTab === 'letters' && currentPlan !== 'Free' && (
+      {seekerTab === 'letters' && (
         <div className="border border-slate-200 bg-white rounded-3xl p-6 space-y-6 shadow-sm">
-          <div className="pb-4 border-b border-slate-100">
-            <span className="text-[10px] uppercase font-bold text-indigo-600 tracking-wider font-mono">
-              AI Cover Letter Studio
-            </span>
-            <h3 className="text-base font-black text-slate-900 leading-tight mt-1">Dynamic Letter Personalization Builder</h3>
-            <p className="text-xs text-slate-500 mt-0.5 font-medium">Select target published global opening metrics and select tailored pitch tone styles.</p>
+          <div className="pb-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <span className="text-[10px] uppercase font-bold text-indigo-600 tracking-wider font-mono">
+                AI Cover Letter Studio
+              </span>
+              <h3 className="text-base font-black text-slate-900 leading-tight mt-1">Dynamic Letter Personalization Builder</h3>
+              <p className="text-xs text-slate-500 mt-0.5 font-medium">Select target published global opening metrics and select tailored pitch tone styles.</p>
+            </div>
+            {currentPlan === 'Free' && (
+              <div className="px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-xl flex items-center gap-1.5 self-start sm:self-center">
+                <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                <span className="text-[11px] font-semibold text-amber-700">Free Tier: 5 letters / day limit</span>
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -1939,21 +2072,37 @@ ${user.fullName}
             <div className="lg:col-span-2 space-y-3">
               {customLetterText ? (
                 <div className="space-y-3 text-xs font-sans">
-                  <div className="flex justify-between items-center bg-slate-50 p-3 px-4 rounded-xl border border-slate-200">
+                  <div className="flex flex-wrap justify-between items-center bg-slate-50 p-3 px-4 rounded-xl border border-slate-200 gap-2">
                     <span className="font-extrabold text-slate-800 flex items-center gap-2">
                       <CheckCircle2 className="w-4 h-4 text-emerald-600 animate-pulse" />
                       Letter Tailored For: {selectedJobForLetter?.company}
                     </span>
-                    <button
-                      onClick={() => {
-                        navigator.clipboard.writeText(customLetterText);
-                        setCopyStatus(true);
-                        setTimeout(() => setCopyStatus(false), 1500);
-                      }}
-                      className="text-indigo-600 text-[11px] font-bold font-sans inline-flex items-center gap-1 hover:underline cursor-pointer bg-white px-2.5 py-1 rounded-lg border border-slate-200 shadow-2xs hover:bg-slate-50 transition-colors"
-                    >
-                      {copyStatus ? 'Copied Content!' : 'Copy Letter'}
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(customLetterText);
+                          setCopyStatus(true);
+                          setTimeout(() => setCopyStatus(false), 1500);
+                        }}
+                        className="text-indigo-600 text-[11px] font-bold font-sans inline-flex items-center gap-1 hover:underline cursor-pointer bg-white px-2.5 py-1 rounded-lg border border-slate-200 shadow-2xs hover:bg-slate-50 transition-colors"
+                      >
+                        {copyStatus ? 'Copied!' : 'Copy'}
+                      </button>
+                      <button
+                        onClick={downloadPdf}
+                        className="text-emerald-700 text-[11px] font-bold font-sans inline-flex items-center gap-1 hover:underline cursor-pointer bg-white px-2.5 py-1 rounded-lg border border-slate-200 shadow-2xs hover:bg-slate-50 transition-colors"
+                        title="Print / Save Cover Letter as vector PDF"
+                      >
+                        PDF
+                      </button>
+                      <button
+                        onClick={downloadDocx}
+                        className="text-amber-700 text-[11px] font-bold font-sans inline-flex items-center gap-1 hover:underline cursor-pointer bg-white px-2.5 py-1 rounded-lg border border-slate-200 shadow-2xs hover:bg-slate-50 transition-colors"
+                        title="Download editable Microsoft Word DOCX"
+                      >
+                        DOCX
+                      </button>
+                    </div>
                   </div>
 
                   <textarea
