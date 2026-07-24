@@ -18,7 +18,7 @@ interface JobMatchProps {
   onRefreshTelemetry: () => void;
   token: string;
   getPortalJobUrl?: (job: Job | null) => string;
-  onApplyRedirect?: (job: Job) => void;
+  onApplyRedirect?: (job: Job, skipWindowOpen?: boolean) => void;
   appliedJobs?: string[];
   currentPlan?: 'Free' | 'Pro' | 'Enterprise';
   onNavigatePricing?: () => void;
@@ -605,7 +605,7 @@ ${user.fullName || "Aura Candidate"}`;
                               rel="noopener noreferrer"
                               onClick={() => {
                                 if (onApplyRedirect) {
-                                  onApplyRedirect(job);
+                                  onApplyRedirect(job, true);
                                 }
                               }}
                               className={`py-2 px-2 text-[10.5px] font-bold rounded-lg cursor-pointer flex items-center justify-center gap-1.5 transition-all select-none text-center ${
@@ -645,7 +645,7 @@ ${user.fullName || "Aura Candidate"}`;
                               rel="noopener noreferrer"
                               onClick={() => {
                                 if (onApplyRedirect) {
-                                  onApplyRedirect(job);
+                                  onApplyRedirect(job, true);
                                 }
                               }}
                               className="text-indigo-600 font-bold hover:underline cursor-pointer flex items-center gap-0.5 inline-flex text-[10px]"

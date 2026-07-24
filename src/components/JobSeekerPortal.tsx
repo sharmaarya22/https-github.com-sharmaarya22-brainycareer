@@ -252,48 +252,85 @@ export default function JobSeekerPortal({
   }, [token]);
 
   const getPortalJobUrl = (job: Job | null): string => {
-    if (!job) return "";
+    if (!job) return "https://www.linkedin.com/jobs";
     
     const source = (job.source || "").toLowerCase();
     const title = job.title || "";
+    const company = job.company || "";
+    const location = job.location || job.country || "";
     const urlLower = (job.originalUrl || "").toLowerCase();
     
     // Clean up the job title: e.g. "Senior Full Stack Engineer (React/Node.js)" -> "Senior Full Stack Engineer"
     let cleanTitle = title.replace(/\s*\([^)]*\)/g, "").trim();
-    // Remove "Lead", "Senior", etc. if we want broad matching, but clean title is already great
     cleanTitle = cleanTitle.replace(/\s+-\s+.*$/, "").trim();
 
-    // To ensure the user gets real-world job listings on the actual platforms (since mock company names
-    // like "Vortex Tech Solutions" or "Cognitive Labs AI" do not exist on live portals and yield 0 results),
-    // we search using the Clean Job Title and key technologies (extracted from tags or requirements)
-    const skills = Array.isArray(job.tags) ? job.tags.slice(0, 2).join(" ") : "";
-    const query = `${cleanTitle} ${skills}`.trim();
+    // Construct precise deep search keywords combining Job Title + Company Name + Location
+    const keywords = `${cleanTitle} ${company}`.trim();
+    const fullSearchQuery = `${cleanTitle} ${company} ${location}`.trim();
 
-    if (source.includes("linkedin") || urlLower.includes("linkedin")) {
-      return `https://www.linkedin.com/jobs/search/?keywords=${encodeURIComponent(query)}`;
-    }
-    if (source.includes("naukri") || urlLower.includes("naukri")) {
-      return `https://www.naukri.com/search/jobs?keyword=${encodeURIComponent(query)}`;
-    }
-    if (source.includes("monster") || source.includes("foundit") || urlLower.includes("monster") || urlLower.includes("foundit")) {
-      return `https://www.foundit.in/srp/results?query=${encodeURIComponent(query)}`;
-    }
-    if (source.includes("hirist") || urlLower.includes("hirist")) {
-      return `https://www.hirist.tech/search.html?keyword=${encodeURIComponent(query)}`;
-    }
-    if (source.includes("indeed") || urlLower.includes("indeed")) {
-      return `https://www.indeed.com/jobs?q=${encodeURIComponent(query)}`;
-    }
-    if (source.includes("timesjobs") || urlLower.includes("timesjobs") || source.includes("times")) {
-      return `https://www.timesjobs.com/candidate/job-search.html?searchType=personalizedSearch&from=submit&txtKeywords=${encodeURIComponent(query)}`;
-    }
-    
-    // Fallback if there is a custom URL that isn't one of the known mock paths
-    if (job.originalUrl && job.originalUrl !== '#' && !job.originalUrl.includes("vortex-") && !job.originalUrl.includes("cognitive-") && !job.originalUrl.includes("scaleops-") && !job.originalUrl.includes("eleven-") && !job.originalUrl.includes("growthflow-")) {
+    // Direct employer / ATS links (Lever, Greenhouse, Workday, custom corporate URLs)
+    if (
+      job.originalUrl &&
+      job.originalUrl !== '#' &&
+      !job.originalUrl.includes("brainycareer.com") &&
+      (
+        job.originalUrl.includes("lever.co") ||
+        job.originalUrl.includes("greenhouse.io") ||
+        job.originalUrl.includes("workday.com") ||
+        job.originalUrl.includes("ashbyhq.com") ||
+        job.originalUrl.includes("bamboohr.com") ||
+        job.originalUrl.includes("smartrecruiters.com") ||
+        job.originalUrl.includes("jobs.jobvite.com") ||
+        job.originalUrl.includes("myworkdayjobs.com") ||
+        (job.originalUrl.startsWith("http") && !job.originalUrl.match(/-(11204|12248|99120|33120|44112|9104|1004|2201|4512|2209|9902|3401|1002|9020|11234|44012|2201|5501|12344|9012|8812|4001|8802|7701|1123|5050|77123|7705|1110|2234|8812|9912|8802|9812|7704|6601|2234|8801|2201|5501|8812|8812|9912|8812|9902|1223|9912|8812|8812|2234|1123|9912|7704|9904|8812|job-\d+)$/))
+      )
+    ) {
       return job.originalUrl;
     }
-    
-    return `https://www.linkedin.com/jobs/search/?keywords=${encodeURIComponent(query)}`;
+
+    // Direct Deep-Link Search query construction per external job portal platform:
+    if (source.includes("linkedin") || urlLower.includes("linkedin")) {
+      return `https://www.linkedin.com/jobs/search/?keywords=${encodeURIComponent(keywords)}${location ? `&location=${encodeURIComponent(location)}` : ''}`;
+    }
+
+    if (source.includes("naukri") || urlLower.includes("naukri")) {
+      return `https://www.naukri.com/search/jobs?keyword=${encodeURIComponent(keywords)}${location ? `&location=${encodeURIComponent(location)}` : ''}`;
+    }
+
+    if (source.includes("indeed") || urlLower.includes("indeed")) {
+      return `https://www.indeed.com/jobs?q=${encodeURIComponent(keywords)}${location ? `&l=${encodeURIComponent(location)}` : ''}`;
+    }
+
+    if (source.includes("glassdoor") || urlLower.includes("glassdoor")) {
+      return `https://www.glassdoor.com/Job/jobs.htm?sc.keyword=${encodeURIComponent(keywords)}${location ? `&locKeyword=${encodeURIComponent(location)}` : ''}`;
+    }
+
+    if (source.includes("monster") || source.includes("foundit") || urlLower.includes("monster") || urlLower.includes("foundit")) {
+      return `https://www.foundit.in/srp/results?query=${encodeURIComponent(keywords)}${location ? `&locations=${encodeURIComponent(location)}` : ''}`;
+    }
+
+    if (source.includes("hirist") || urlLower.includes("hirist")) {
+      return `https://www.hirist.tech/search.html?keyword=${encodeURIComponent(keywords)}`;
+    }
+
+    if (source.includes("timesjobs") || urlLower.includes("timesjobs") || source.includes("times")) {
+      return `https://www.timesjobs.com/candidate/job-search.html?searchType=personalizedSearch&from=submit&txtKeywords=${encodeURIComponent(keywords)}${location ? `&txtLocation=${encodeURIComponent(location)}` : ''}`;
+    }
+
+    if (source.includes("google") || urlLower.includes("google")) {
+      return `https://www.google.com/search?q=${encodeURIComponent(`jobs ${fullSearchQuery}`)}`;
+    }
+
+    if (source.includes("wellfound") || source.includes("angellist") || urlLower.includes("wellfound")) {
+      return `https://wellfound.com/jobs?q=${encodeURIComponent(keywords)}`;
+    }
+
+    if (source.includes("ziprecruiter") || urlLower.includes("ziprecruiter")) {
+      return `https://www.ziprecruiter.com/candidate/search?search=${encodeURIComponent(keywords)}&location=${encodeURIComponent(location)}`;
+    }
+
+    // Fallback: LinkedIn Jobs search query with Title, Company & Location
+    return `https://www.linkedin.com/jobs/search/?keywords=${encodeURIComponent(keywords)}${location ? `&location=${encodeURIComponent(location)}` : ''}`;
   };
 
   // Synchronize dynamic applications from DB to Kanban board
@@ -714,7 +751,7 @@ ${user.fullName}
   };
 
   // Open direct external apply and log background tracking
-  const handleOpenApplySim = async (job: Job) => {
+  const handleOpenApplySim = async (job: Job, skipWindowOpen: boolean = false) => {
     if (currentPlan === 'Free') {
       const todayCount = getTodayApplicationsCount();
       if (todayCount >= 5) {
@@ -732,15 +769,17 @@ ${user.fullName}
 
     const portalUrl = getPortalJobUrl(job);
 
-    // 1. Instantly open the respective external job portal in a new tab
-    try {
-      window.open(portalUrl, '_blank');
-    } catch (e) {
-      console.warn("Direct programmatic window.open blocked by sandboxed iframe. Fallback applied.", e);
+    // 1. Instantly open the respective external job portal in a new tab if not initiated by an anchor click
+    if (!skipWindowOpen) {
+      try {
+        window.open(portalUrl, '_blank');
+      } catch (e) {
+        console.warn("Direct programmatic window.open blocked by sandboxed iframe. Fallback applied.", e);
+      }
     }
 
     // Show nice in-app toast notification confirming direct redirect tracking
-    setToastMessage(`🚀 Opening ${job.company} Careers Portal! Automatically tracking application...`);
+    setToastMessage(`🚀 Redirecting to ${job.company} opening on ${job.source || 'External Portal'}! Tracking application...`);
     setTimeout(() => setToastMessage(null), 4500);
 
     try {
