@@ -4,7 +4,7 @@ import {
   Sparkles, AlertCircle, LogOut, Check, Edit3, TrendingUp, Info, 
   Settings, Globe, RefreshCw, Layers, ShieldCheck, MailCheck, Bell, User as UserIcon,
   Menu, MessageSquare, LayoutDashboard, HelpCircle, Award, Compass, Sparkle,
-  ChevronLeft, ChevronRight, Bot, SlidersHorizontal, Briefcase, FileText, Mail
+  ChevronLeft, ChevronRight, Bot, SlidersHorizontal, Briefcase, FileText, Mail, Palette, X as CloseIcon
 } from 'lucide-react';
 import JobSeekerPortal from './JobSeekerPortal';
 import EmployerPortal from './EmployerPortal';
@@ -48,6 +48,18 @@ export default function JobPortalDashboard({ user, token, onLogout, onUserUpdate
   const [supabaseEnabled, setSupabaseEnabled] = useState(false);
   const [isLiveSupabase, setIsLiveSupabase] = useState(false);
   const [checkingSync, setCheckingSync] = useState(false);
+
+  // Portal Theme Preset state
+  const [currentTheme, setCurrentTheme] = useState<'pearl' | 'midnight' | 'emerald' | 'gold'>(() => {
+    return (localStorage.getItem('portal_theme_preset') as any) || 'pearl';
+  });
+  const [showThemePopover, setShowThemePopover] = useState(false);
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', currentTheme);
+    document.body.setAttribute('data-theme', currentTheme);
+    localStorage.setItem('portal_theme_preset', currentTheme);
+  }, [currentTheme]);
 
   // Notification configuration builders
   const [showSettingsDrawer, setShowSettingsDrawer] = useState(false);
@@ -545,7 +557,7 @@ export default function JobPortalDashboard({ user, token, onLogout, onUserUpdate
                   onClick={() => setMobileSidebarOpen(false)}
                   className="p-1 hover:bg-slate-850 rounded-lg cursor-pointer"
                 >
-                  <X className="w-4 h-4 text-slate-400" />
+                  <CloseIcon className="w-4 h-4 text-slate-400" />
                 </button>
               </div>
 
@@ -661,6 +673,69 @@ export default function JobPortalDashboard({ user, token, onLogout, onUserUpdate
                 <span className="text-emerald-600">✓ Sync Live</span>
               ) : (
                 <span>● Active Cache</span>
+              )}
+            </div>
+
+            {/* Theme Switcher Selector */}
+            <div className="relative">
+              <button
+                onClick={() => {
+                  setShowThemePopover(!showThemePopover);
+                  setShowNotificationsPopover(false);
+                }}
+                className="flex items-center gap-2 px-3 py-1.5 border border-slate-200 hover:bg-slate-50 rounded-xl transition-all cursor-pointer bg-white shadow-3xs text-xs font-bold text-slate-700"
+                title="Change Portal Theme"
+              >
+                <Palette className="w-4 h-4 text-indigo-600" />
+                <span className="capitalize text-[11px] hidden lg:inline font-mono">
+                  {currentTheme === 'pearl' && 'Titanium Pearl'}
+                  {currentTheme === 'midnight' && 'Midnight Obsidian'}
+                  {currentTheme === 'emerald' && 'Executive Emerald'}
+                  {currentTheme === 'gold' && 'Champagne Gold'}
+                </span>
+              </button>
+
+              {showThemePopover && (
+                <div className="absolute right-0 mt-2.5 w-64 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 p-3 space-y-2 text-xs animate-fade-in">
+                  <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                    <span className="font-extrabold text-slate-800 text-[10px] uppercase tracking-wider flex items-center gap-1.5">
+                      <Palette className="w-3.5 h-3.5 text-indigo-600" /> Portal Themes
+                    </span>
+                    <span className="text-[9px] font-mono font-bold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded">4 Presets</span>
+                  </div>
+
+                  <div className="space-y-1 pt-1">
+                    {[
+                      { id: 'pearl', label: 'Titanium Pearl', desc: 'Ultra-clean Light & Royal Indigo', color: 'bg-indigo-600' },
+                      { id: 'midnight', label: 'Midnight Obsidian', desc: 'Sleek Dark Mode & Glass Highlights', color: 'bg-slate-900' },
+                      { id: 'emerald', label: 'Executive Emerald', desc: 'Forest Green & Pearl Slate', color: 'bg-emerald-600' },
+                      { id: 'gold', label: 'Champagne Gold', desc: 'Luxury Ivory & Warm Gold', color: 'bg-amber-600' },
+                    ].map(t => (
+                      <button
+                        key={t.id}
+                        onClick={() => {
+                          setCurrentTheme(t.id as any);
+                          setShowThemePopover(false);
+                          triggerToast("Theme Updated!", `Switched portal theme to ${t.label}.`);
+                        }}
+                        className={`w-full flex items-center justify-between p-2.5 rounded-xl border transition-all cursor-pointer text-left ${
+                          currentTheme === t.id
+                            ? 'bg-indigo-50/70 border-indigo-400/50 font-bold'
+                            : 'border-transparent hover:bg-slate-50 text-slate-600'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <div className={`w-3.5 h-3.5 rounded-full ${t.color} shrink-0 border border-white shadow-3xs`} />
+                          <div>
+                            <span className="block text-[11px] font-extrabold text-slate-800 leading-tight">{t.label}</span>
+                            <span className="block text-[9px] text-slate-400 font-medium">{t.desc}</span>
+                          </div>
+                        </div>
+                        {currentTheme === t.id && <Check className="w-3.5 h-3.5 text-indigo-600 shrink-0" />}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               )}
             </div>
 

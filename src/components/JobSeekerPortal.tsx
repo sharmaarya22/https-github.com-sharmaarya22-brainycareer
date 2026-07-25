@@ -254,11 +254,21 @@ export default function JobSeekerPortal({
   const getPortalJobUrl = (job: Job | null): string => {
     if (!job) return "https://www.linkedin.com/jobs";
     
+    // Priority: Use original_url (snake_case) or originalUrl (camelCase) directly if provided
+    const directUrl = (job as any).original_url || job.originalUrl;
+    if (directUrl && typeof directUrl === 'string' && directUrl.trim() !== '' && directUrl.trim() !== '#') {
+      let raw = directUrl.trim();
+      if (!raw.startsWith('http://') && !raw.startsWith('https://')) {
+        raw = `https://${raw}`;
+      }
+      return raw;
+    }
+
     const source = (job.source || "").toLowerCase();
     const title = job.title || "";
     const company = job.company || "";
     const location = job.location || job.country || "";
-    const urlLower = (job.originalUrl || "").toLowerCase();
+    const urlLower = ((job as any).original_url || job.originalUrl || "").toLowerCase();
     
     // Extract pristine job title keywords: e.g. "Senior Business Analyst (Cloud Migration Services)" -> "Senior Business Analyst"
     let cleanTitle = title
@@ -279,26 +289,6 @@ export default function JobSeekerPortal({
 
     // Construct search term: use clean title, or clean title + company only if it's a known enterprise brand
     const searchKeywords = isKnownBrand ? `${cleanTitle} ${company}`.trim() : cleanTitle;
-
-    // Direct employer / ATS links (Lever, Greenhouse, Workday, custom corporate URLs)
-    if (
-      job.originalUrl &&
-      job.originalUrl !== '#' &&
-      !job.originalUrl.includes("brainycareer.com") &&
-      (
-        job.originalUrl.includes("lever.co") ||
-        job.originalUrl.includes("greenhouse.io") ||
-        job.originalUrl.includes("workday.com") ||
-        job.originalUrl.includes("ashbyhq.com") ||
-        job.originalUrl.includes("bamboohr.com") ||
-        job.originalUrl.includes("smartrecruiters.com") ||
-        job.originalUrl.includes("jobs.jobvite.com") ||
-        job.originalUrl.includes("myworkdayjobs.com") ||
-        (job.originalUrl.startsWith("http") && !job.originalUrl.match(/-(11204|12248|99120|33120|44112|9104|1004|2201|4512|2209|9902|3401|1002|9020|11234|44012|2201|5501|12344|9012|8812|4001|8802|7701|1123|5050|77123|7705|1110|2234|8812|9912|8802|9812|7704|6601|2234|8801|2201|5501|8812|8812|9912|8812|9902|1223|9912|8812|8812|2234|1123|9912|7704|9904|8812|job-\d+)$/))
-      )
-    ) {
-      return job.originalUrl;
-    }
 
     // Direct Deep-Link Search query construction per external job portal platform:
     if (source.includes("linkedin") || urlLower.includes("linkedin")) {
@@ -338,7 +328,7 @@ export default function JobSeekerPortal({
     }
 
     if (source.includes("ziprecruiter") || urlLower.includes("ziprecruiter")) {
-      return `https://www.ziprecruiter.com/candidate/search?search=${encodeURIComponent(searchKeywords)}${cleanLocation ? `&location=${encodeURIComponent(cleanLocation)}` : ''}`;
+      return `https://www.ziprecruiter.com/candidate/search?search=${encodeURIComponent(searchKeywords)}&location=${encodeURIComponent(cleanLocation)}`;
     }
 
     // Fallback: Google Jobs Search query
