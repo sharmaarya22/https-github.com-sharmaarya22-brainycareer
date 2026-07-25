@@ -260,13 +260,25 @@ export default function JobSeekerPortal({
     const location = job.location || job.country || "";
     const urlLower = (job.originalUrl || "").toLowerCase();
     
-    // Clean up the job title: e.g. "Senior Full Stack Engineer (React/Node.js)" -> "Senior Full Stack Engineer"
-    let cleanTitle = title.replace(/\s*\([^)]*\)/g, "").trim();
-    cleanTitle = cleanTitle.replace(/\s+-\s+.*$/, "").trim();
+    // Extract pristine job title keywords: e.g. "Senior Business Analyst (Cloud Migration Services)" -> "Senior Business Analyst"
+    let cleanTitle = title
+      .replace(/\s*\([^)]*\)/g, "")
+      .replace(/\s*\[[^\]]*\]/g, "")
+      .replace(/\s+-\s+.*$/, "")
+      .replace(/\s*:\s*.*$/, "")
+      .trim();
 
-    // Construct precise deep search keywords combining Job Title + Company Name + Location
-    const keywords = `${cleanTitle} ${company}`.trim();
-    const fullSearchQuery = `${cleanTitle} ${company} ${location}`.trim();
+    if (!cleanTitle) cleanTitle = title;
+
+    // Extract clean location (e.g. "London, UK" -> "London", "Noida, India" -> "Noida")
+    const cleanLocation = location ? location.split(',')[0].trim() : "";
+
+    // List of major known corporate brands where appending company name is safe
+    const topGlobalBrands = ["google", "microsoft", "amazon", "apple", "meta", "netflix", "ibm", "oracle", "salesforce", "adobe", "tcs", "infosys", "wipro", "accenture", "deloitte"];
+    const isKnownBrand = topGlobalBrands.some(brand => company.toLowerCase().includes(brand));
+
+    // Construct search term: use clean title, or clean title + company only if it's a known enterprise brand
+    const searchKeywords = isKnownBrand ? `${cleanTitle} ${company}`.trim() : cleanTitle;
 
     // Direct employer / ATS links (Lever, Greenhouse, Workday, custom corporate URLs)
     if (
@@ -290,47 +302,47 @@ export default function JobSeekerPortal({
 
     // Direct Deep-Link Search query construction per external job portal platform:
     if (source.includes("linkedin") || urlLower.includes("linkedin")) {
-      return `https://www.linkedin.com/jobs/search/?keywords=${encodeURIComponent(keywords)}${location ? `&location=${encodeURIComponent(location)}` : ''}`;
+      return `https://www.linkedin.com/jobs/search/?keywords=${encodeURIComponent(searchKeywords)}${cleanLocation ? `&location=${encodeURIComponent(cleanLocation)}` : ''}`;
     }
 
     if (source.includes("naukri") || urlLower.includes("naukri")) {
-      return `https://www.naukri.com/search/jobs?keyword=${encodeURIComponent(keywords)}${location ? `&location=${encodeURIComponent(location)}` : ''}`;
+      return `https://www.naukri.com/search/jobs?keyword=${encodeURIComponent(searchKeywords)}${cleanLocation ? `&location=${encodeURIComponent(cleanLocation)}` : ''}`;
     }
 
     if (source.includes("indeed") || urlLower.includes("indeed")) {
-      return `https://www.indeed.com/jobs?q=${encodeURIComponent(keywords)}${location ? `&l=${encodeURIComponent(location)}` : ''}`;
+      return `https://www.indeed.com/jobs?q=${encodeURIComponent(searchKeywords)}${cleanLocation ? `&l=${encodeURIComponent(cleanLocation)}` : ''}`;
     }
 
     if (source.includes("glassdoor") || urlLower.includes("glassdoor")) {
-      return `https://www.glassdoor.com/Job/jobs.htm?sc.keyword=${encodeURIComponent(keywords)}${location ? `&locKeyword=${encodeURIComponent(location)}` : ''}`;
+      return `https://www.glassdoor.com/Job/jobs.htm?sc.keyword=${encodeURIComponent(searchKeywords)}${cleanLocation ? `&locKeyword=${encodeURIComponent(cleanLocation)}` : ''}`;
     }
 
     if (source.includes("monster") || source.includes("foundit") || urlLower.includes("monster") || urlLower.includes("foundit")) {
-      return `https://www.foundit.in/srp/results?query=${encodeURIComponent(keywords)}${location ? `&locations=${encodeURIComponent(location)}` : ''}`;
+      return `https://www.foundit.in/srp/results?query=${encodeURIComponent(searchKeywords)}${cleanLocation ? `&locations=${encodeURIComponent(cleanLocation)}` : ''}`;
     }
 
     if (source.includes("hirist") || urlLower.includes("hirist")) {
-      return `https://www.hirist.tech/search.html?keyword=${encodeURIComponent(keywords)}`;
+      return `https://www.hirist.tech/search.html?keyword=${encodeURIComponent(searchKeywords)}`;
     }
 
     if (source.includes("timesjobs") || urlLower.includes("timesjobs") || source.includes("times")) {
-      return `https://www.timesjobs.com/candidate/job-search.html?searchType=personalizedSearch&from=submit&txtKeywords=${encodeURIComponent(keywords)}${location ? `&txtLocation=${encodeURIComponent(location)}` : ''}`;
+      return `https://www.timesjobs.com/candidate/job-search.html?searchType=personalizedSearch&from=submit&txtKeywords=${encodeURIComponent(searchKeywords)}${cleanLocation ? `&txtLocation=${encodeURIComponent(cleanLocation)}` : ''}`;
     }
 
     if (source.includes("google") || urlLower.includes("google")) {
-      return `https://www.google.com/search?q=${encodeURIComponent(`jobs ${fullSearchQuery}`)}`;
+      return `https://www.google.com/search?q=${encodeURIComponent(`${searchKeywords} jobs${cleanLocation ? ` in ${cleanLocation}` : ''}`)}`;
     }
 
     if (source.includes("wellfound") || source.includes("angellist") || urlLower.includes("wellfound")) {
-      return `https://wellfound.com/jobs?q=${encodeURIComponent(keywords)}`;
+      return `https://wellfound.com/jobs?q=${encodeURIComponent(searchKeywords)}`;
     }
 
     if (source.includes("ziprecruiter") || urlLower.includes("ziprecruiter")) {
-      return `https://www.ziprecruiter.com/candidate/search?search=${encodeURIComponent(keywords)}&location=${encodeURIComponent(location)}`;
+      return `https://www.ziprecruiter.com/candidate/search?search=${encodeURIComponent(searchKeywords)}${cleanLocation ? `&location=${encodeURIComponent(cleanLocation)}` : ''}`;
     }
 
-    // Fallback: LinkedIn Jobs search query with Title, Company & Location
-    return `https://www.linkedin.com/jobs/search/?keywords=${encodeURIComponent(keywords)}${location ? `&location=${encodeURIComponent(location)}` : ''}`;
+    // Fallback: Google Jobs Search query
+    return `https://www.google.com/search?q=${encodeURIComponent(`${searchKeywords} jobs${cleanLocation ? ` in ${cleanLocation}` : ''}`)}`;
   };
 
   // Synchronize dynamic applications from DB to Kanban board
